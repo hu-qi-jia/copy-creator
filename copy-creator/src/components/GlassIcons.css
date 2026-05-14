@@ -1,0 +1,90 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  align-items: center;
+  padding: 8px 0;
+  margin: 0;
+  gap: 0;
+}
+
+.wrapper .icon-content {
+  position: relative;
+  margin: 10px 0;
+}
+
+.wrapper .icon-content .icon-btn {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  color: rgba(60, 60, 67, 0.9);
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
+  border: none;
+  outline: none;
+}
+
+[data-theme="dark"] .wrapper .icon-content .icon-btn {
+  color: rgba(255, 255, 255, 0.95);
+  background-color: rgba(60, 60, 67, 0.82);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.wrapper .icon-content .icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.wrapper .icon-content .icon-btn:hover {
+  box-shadow: 3px 2px 45px 0px rgb(0 0 0 / 12%);
+  color: #fff;
+}
+
+.wrapper .icon-content .icon-btn.active {
+  color: #fff;
+}
+
+.wrapper .icon-content .icon-btn svg {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+.wrapper .icon-content .icon-btn .filled {
+  position: absolute;
+  top: auto;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  transition: all 0.3s ease-in-out;
+}
+
+.wrapper .icon-content .icon-btn:hover .filled {
+  height: 100%;
+}
+
+.wrapper .icon-content .icon-btn.active .filled {
+  height: 100%;
+}
+
+.wrapper .icon-content.clipboard .filled {
+  background-color: #007AFF;
+}
+
+.wrapper .icon-content.phrases .filled {
+  background-color: #AF52DE;
+}
+
+.wrapper .icon-content.translate .filled {
+  background-color: #34C759;
+}
