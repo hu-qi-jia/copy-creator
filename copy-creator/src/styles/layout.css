@@ -112,6 +112,7 @@
   height: 28px;
   flex-shrink: 0;
   border-radius: 8px;
+  object-fit: contain;
 }
 
 .sidebar-brand {

@@ -34,17 +34,19 @@ pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let tauri::tray::TrayIconEvent::Click { button_state, .. } = event {
+            if let tauri::tray::TrayIconEvent::Click { button, button_state, .. } = event {
                 if button_state != tauri::tray::MouseButtonState::Down {
                     return;
                 }
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        window.hide().ok();
-                    } else {
-                        window.show().ok();
-                        window.set_focus().ok();
+                if button == tauri::tray::MouseButton::Left {
+                    let app = tray.app_handle();
+                    if let Some(window) = app.get_webview_window("main") {
+                        if window.is_visible().unwrap_or(false) {
+                            window.hide().ok();
+                        } else {
+                            window.show().ok();
+                            window.set_focus().ok();
+                        }
                     }
                 }
             }
