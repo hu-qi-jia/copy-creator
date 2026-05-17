@@ -36,13 +36,23 @@ static RADIAL_START_X: AtomicI32 = AtomicI32::new(0);
 static RADIAL_START_Y: AtomicI32 = AtomicI32::new(0);
 #[cfg(target_os = "windows")]
 static LAST_MOVE_EMIT_MS: AtomicU64 = AtomicU64::new(0);
+#[cfg(target_os = "windows")]
+static RADIAL_SHOW_MS: AtomicU64 = AtomicU64::new(0);
 
 const MOVE_THROTTLE_MS: u64 = 16;
+const RELEASE_CHECK_DELAY_MS: u64 = 200;
 
 #[derive(serde::Serialize, Clone)]
 struct RadialMenuPoint {
     x: i32,
     y: i32,
+}
+
+#[derive(serde::Serialize, Clone)]
+struct RadialMenuDownPayload {
+    x: i32,
+    y: i32,
+    theme: String,
 }
 
 pub fn toggle_window(app: &AppHandle) {
@@ -123,10 +133,19 @@ unsafe extern "system" fn mouse_hook_callback(
                         RADIAL_START_X.store(sx, Ordering::SeqCst);
                         RADIAL_START_Y.store(sy, Ordering::SeqCst);
 
-                        log::info!("radial-menu-down: screen=({}, {}), css=({}, {})", sx, sy, css_x, css_y);
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        RADIAL_SHOW_MS.store(now_ms, Ordering::SeqCst);
+
+                        let theme = crate::db::get_setting(app.clone(), "theme".to_string())
+                            .unwrap_or_else(|_| "light".to_string());
+
+                        log::info!("radial-menu-down: screen=({}, {}), css=({}, {}), theme={}", sx, sy, css_x, css_y, theme);
                         let _ = app.emit(
                             "radial-menu-down",
-                            RadialMenuPoint { x: css_x, y: css_y },
+                            RadialMenuDownPayload { x: css_x, y: css_y, theme },
                         );
 
                         let _ = window.show();
@@ -138,16 +157,25 @@ unsafe extern "system" fn mouse_hook_callback(
         }
 
         if msg == WM_MOUSEMOVE && RADIAL_RIGHT_DOWN.load(Ordering::SeqCst) {
-            // Close window if user released Ctrl or Alt while holding right button
-            let ctrl = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16) & 0x8000 != 0;
-            let alt = (GetAsyncKeyState(VK_MENU.0 as i32) as u16) & 0x8000 != 0;
-            if !ctrl || !alt {
-                RADIAL_RIGHT_DOWN.store(false, Ordering::SeqCst);
-                if let Some(app) = APP_HANDLE.get() {
-                    let _ = app.emit("radial-menu-up", ());
+            // Close window if user released Ctrl or Alt while holding right button.
+            // Skip this check within RELEASE_CHECK_DELAY_MS of initial show to avoid
+            // spurious aborts from keyboard state jitter during focus transition.
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let show_ms = RADIAL_SHOW_MS.load(Ordering::SeqCst);
+            if now_ms.saturating_sub(show_ms) >= RELEASE_CHECK_DELAY_MS {
+                let ctrl = (GetAsyncKeyState(VK_CONTROL.0 as i32) as u16) & 0x8000 != 0;
+                let alt = (GetAsyncKeyState(VK_MENU.0 as i32) as u16) & 0x8000 != 0;
+                if !ctrl || !alt {
+                    RADIAL_RIGHT_DOWN.store(false, Ordering::SeqCst);
+                    if let Some(app) = APP_HANDLE.get() {
+                        let _ = app.emit("radial-menu-up", ());
+                    }
+                    let hook = HHOOK(HOOK_HANDLE.load(Ordering::SeqCst));
+                    return unsafe { CallNextHookEx(hook, n_code, w_param, l_param) };
                 }
-                let hook = HHOOK(HOOK_HANDLE.load(Ordering::SeqCst));
-                return unsafe { CallNextHookEx(hook, n_code, w_param, l_param) };
             }
 
             let now = std::time::SystemTime::now()

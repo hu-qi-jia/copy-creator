@@ -117,10 +117,6 @@ pub fn run() {
                 let _ = radial.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
                 #[cfg(target_os = "windows")]
                 apply_backdrop_effect(&radial);
-                // Warm up compositor surface so first show() renders immediately
-                let _ = radial.show();
-                std::thread::sleep(std::time::Duration::from_millis(80));
-                let _ = radial.hide();
                 log::info!("Radial menu popup window created");
             }
 

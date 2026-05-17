@@ -72,11 +72,15 @@ export default function RadialMenu() {
   useEffect(() => { phraseGroupIdRef.current = phraseGroupId; }, [phraseGroupId]);
 
   useEffect(() => {
+    // Initial theme load
     invoke<string>("get_setting", { key: "theme" }).then((theme) => {
       if (theme === "dark" || theme === "light") {
         document.documentElement.setAttribute("data-theme", theme);
       }
     }).catch(() => {});
+    // Pre-load data so it's ready when the menu first shows
+    useClipboardStore.getState().init();
+    usePhraseStore.getState().loadGroups();
   }, []);
 
   const handleTabSwitch = useCallback((key: string) => {
@@ -185,23 +189,15 @@ export default function RadialMenu() {
     let unlisteners: UnlistenFn[] = [];
 
     const setup = async () => {
-      const unDown = await listen<{ x: number; y: number }>("radial-menu-down", (e) => {
+      const unDown = await listen<{ x: number; y: number; theme: string }>("radial-menu-down", (e) => {
         console.log("[RadialMenu] radial-menu-down:", e.payload);
+        // Apply theme synchronously from backend-provided value
+        document.documentElement.setAttribute("data-theme", e.payload.theme);
         isRightDownRef.current = true;
         showTimestampRef.current = Date.now();
         startPosRef.current = { x: e.payload.x, y: e.payload.y };
-
-        // Sync theme with main window on every show
-        invoke<string>("get_setting", { key: "theme" }).then((theme) => {
-          if (theme === "dark" || theme === "light") {
-            document.documentElement.setAttribute("data-theme", theme);
-          }
-        }).catch(() => {});
-
         visibleRef.current = true;
         setVisible(true);
-        useClipboardStore.getState().init();
-        usePhraseStore.getState().loadGroups();
       });
 
       const unMove = await listen<{ x: number; y: number }>("radial-menu-move", (e) => {
@@ -212,17 +208,8 @@ export default function RadialMenu() {
 
         if (!visibleRef.current) {
           showTimestampRef.current = Date.now();
-
-          invoke<string>("get_setting", { key: "theme" }).then((theme) => {
-            if (theme === "dark" || theme === "light") {
-              document.documentElement.setAttribute("data-theme", theme);
-            }
-          }).catch(() => {});
-
           visibleRef.current = true;
           setVisible(true);
-          useClipboardStore.getState().init();
-          usePhraseStore.getState().loadGroups();
         }
 
         updateHoverFromPoint(cssX, cssY);
