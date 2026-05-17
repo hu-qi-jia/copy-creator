@@ -79,9 +79,11 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
     listen<ClipboardRecord>("clipboard-update", (event) => {
       const newRecord = event.payload;
-      set((state) => ({
-        records: [newRecord, ...state.records].slice(0, 500),
-      }));
+      set((state) => {
+        // Skip if record with same ID already exists (prevents loadRecords race)
+        if (state.records.some((r) => r.id === newRecord.id)) return state;
+        return { records: [newRecord, ...state.records].slice(0, 500) };
+      });
     }).then((fn) => {
       unlisten = fn;
     });

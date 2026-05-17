@@ -368,16 +368,47 @@ fn get_clipboard_sequence() -> u32 {
 }
 
 /// Insert a new record into the DB and emit clipboard-update.
-/// Each copy operation always creates a new chronological entry.
+/// Skips insertion only if the most recent record has identical type and content
+/// AND was created within the last 2 seconds (debounce window).
+/// Re-copies after 2 seconds are treated as intentional and recorded normally.
 fn insert_and_emit(app: &AppHandle, record_type: &str, content: &str) {
+    let one_second_ago = chrono::Utc::now() - chrono::Duration::seconds(1);
+    let cutoff = one_second_ago.to_rfc3339();
+
+    let is_duplicate: bool = {
+        let state = app.state::<crate::db::DbState>();
+        let x = match state.conn.lock() {
+            Ok(conn) => conn.query_row(
+                "SELECT type, content, created_at FROM clipboard_records ORDER BY created_at DESC LIMIT 1",
+                [],
+                |row| {
+                    let last_type: String = row.get(0)?;
+                    let last_content: String = row.get(1)?;
+                    let last_created: String = row.get(2)?;
+                    Ok(last_type == record_type && last_content == content && last_created >= cutoff)
+                },
+            )
+            .unwrap_or(false),
+            Err(_) => false,
+        };
+        x
+    };
+
+    if is_duplicate {
+        return;
+    }
+
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    let state = app.state::<crate::db::DbState>();
-    if let Ok(conn) = state.conn.lock() {
-        conn.execute(
-            "INSERT INTO clipboard_records (id, type, content, source_app, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![id, record_type, content, "", &now],
-        ).ok();
+    {
+        let state = app.state::<crate::db::DbState>();
+        let _x = match state.conn.lock() {
+            Ok(conn) => conn.execute(
+                "INSERT INTO clipboard_records (id, type, content, source_app, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![id, record_type, content, "", &now],
+            ).ok(),
+            Err(_) => None,
+        };
     }
     app.emit(
         "clipboard-update",

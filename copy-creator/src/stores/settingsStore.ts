@@ -17,10 +17,12 @@ interface SettingsState {
   language: string;
   shortcutKey: string;
   radialMenuEnabled: boolean;
+  autostartEnabled: boolean;
 
   toggleTheme: () => void;
   loadSettings: () => Promise<void>;
   setSetting: (key: string, value: string) => Promise<void>;
+  setAutostart: (enabled: boolean) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -37,6 +39,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   language: "zh-CN",
   shortcutKey: "",
   radialMenuEnabled: true,
+  autostartEnabled: false,
 
   toggleTheme: async () => {
     const next = get().themeMode === "light" ? "dark" : "light";
@@ -63,6 +66,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const language = await invoke<string>("get_setting", { key: "language" });
       const shortcutKey = await invoke<string>("get_setting", { key: "shortcut_key" });
       const radialMenuEnabled = await invoke<string>("get_setting", { key: "radial_menu_enabled" });
+      const autostart = await invoke<string>("get_setting", { key: "autostart" });
 
       set({
         themeMode: (theme as ThemeMode) || "light",
@@ -78,6 +82,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         language: language || "zh-CN",
         shortcutKey: shortcutKey || "",
         radialMenuEnabled: radialMenuEnabled !== "0",
+        autostartEnabled: autostart === "1",
       });
     } catch {
       // Settings not yet initialized, use defaults
@@ -89,6 +94,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await invoke("set_setting", { key, value });
     } catch (e) {
       console.error("Failed to save setting:", e);
+    }
+  },
+
+  setAutostart: async (enabled: boolean) => {
+    const value = enabled ? "1" : "0";
+    try {
+      await invoke("set_setting", { key: "autostart", value });
+      set({ autostartEnabled: enabled });
+    } catch (e) {
+      console.error("Failed to set autostart:", e);
     }
   },
 }));
