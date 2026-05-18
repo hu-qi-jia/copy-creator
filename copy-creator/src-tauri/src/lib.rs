@@ -53,6 +53,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -82,6 +83,9 @@ pub fn run() {
 
             db::init_db(app.handle())?;
             db::prune_old_records(app.handle()).ok();
+
+            // Always start with light theme
+            let _ = db::set_setting(app.handle().clone(), "theme".to_string(), "light".to_string());
 
             // Periodic pruning every hour
             let prune_handle = app.handle().clone();

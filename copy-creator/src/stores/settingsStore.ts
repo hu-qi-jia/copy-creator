@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 type ThemeMode = "light" | "dark";
 
@@ -42,16 +43,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   radialMenuEnabled: true,
   autostartEnabled: false,
 
-  toggleTheme: async () => {
+  toggleTheme: () => {
     const next = get().themeMode === "light" ? "dark" : "light";
     set({ themeMode: next });
-    await get().setSetting("theme", next);
-    await emit("theme-changed", { theme: next });
+    // Persist to DB so radial menu reads the correct theme on re-open
+    get().setSetting("theme", next);
+    emit("theme-changed", { theme: next });
   },
 
   loadSettings: async () => {
     try {
-      const theme = await invoke<string>("get_setting", { key: "theme" });
       const retention = await invoke<string>("get_setting", {
         key: "clipboard_retention",
       });
@@ -68,10 +69,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const language = await invoke<string>("get_setting", { key: "language" });
       const shortcutKey = await invoke<string>("get_setting", { key: "shortcut_key" });
       const radialMenuEnabled = await invoke<string>("get_setting", { key: "radial_menu_enabled" });
-      const autostart = await invoke<string>("get_setting", { key: "autostart" });
 
       set({
-        themeMode: (theme as ThemeMode) || "light",
         clipboardRetention: retention || "1month",
         defaultEngine: engine || "google",
         apiUrl: apiUrl || "",
@@ -84,8 +83,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         language: language || "zh-CN",
         shortcutKey: shortcutKey || "",
         radialMenuEnabled: radialMenuEnabled !== "0",
-        autostartEnabled: autostart === "1",
       });
+
+      // Read autostart state from the OS (plugin)
+      try {
+        const auto = await isEnabled();
+        set({ autostartEnabled: auto });
+      } catch { /* plugin not available */ }
     } catch {
       // Settings not yet initialized, use defaults
     }
@@ -100,9 +104,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setAutostart: async (enabled: boolean) => {
-    const value = enabled ? "1" : "0";
     try {
-      await invoke("set_setting", { key: "autostart", value });
+      if (enabled) {
+        await enable();
+      } else {
+        await disable();
+      }
       set({ autostartEnabled: enabled });
     } catch (e) {
       console.error("Failed to set autostart:", e);
