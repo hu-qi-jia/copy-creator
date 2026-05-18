@@ -1,5 +1,5 @@
 use rusqlite::{Connection, params};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::collections::HashSet;
@@ -294,6 +294,8 @@ pub fn delete_clipboard_record(app: AppHandle, id: String) -> Result<(), String>
 
         conn.execute("DELETE FROM clipboard_records WHERE id = ?1", params![id])
             .map_err(|e| e.to_string())?;
+
+        let _ = app.emit("clipboard-deleted", &id);
 
         match record {
             Some((t, c)) if t == "image" => Some(c),
