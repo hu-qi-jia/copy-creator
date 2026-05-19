@@ -324,21 +324,23 @@ export default function RadialMenu() {
     };
   }, [resetState, updateHoverFromPoint]);
 
-  const clipboardStore = useClipboardStore();
-  const phraseStore = usePhraseStore();
+  const records = useClipboardStore((s) => s.records);
+  const phraseGroups = usePhraseStore((s) => s.groups);
+  const phrases = usePhraseStore((s) => s.phrases);
+  const loadPhrases = usePhraseStore((s) => s.loadPhrases);
 
   useEffect(() => {
-    if (visible && activeTab === "phrases" && !phraseGroupId && phraseStore.groups.length > 0) {
-      const firstId = phraseStore.groups[0].id;
+    if (visible && activeTab === "phrases" && !phraseGroupId && phraseGroups.length > 0) {
+      const firstId = phraseGroups[0].id;
       setPhraseGroupId(firstId);
       phraseGroupIdRef.current = firstId;
-      phraseStore.loadPhrases(firstId);
+      loadPhrases(firstId);
     }
-  }, [visible, activeTab, phraseGroupId, phraseStore.groups, phraseStore.loadPhrases]);
+  }, [visible, activeTab, phraseGroupId, phraseGroups, loadPhrases]);
 
   const filteredRecords = clipboardCategory === "all"
-    ? clipboardStore.records
-    : clipboardStore.records.filter((r) => r.type === clipboardCategory);
+    ? records
+    : records.filter((r) => r.type === clipboardCategory);
 
   const items = activeTab === "clipboard"
     ? filteredRecords.slice(0, MAX_ITEMS).map((r) => ({
@@ -351,7 +353,7 @@ export default function RadialMenu() {
         type: r.type,
         createdAt: r.created_at,
       }))
-    : phraseStore.phrases.map((p) => ({
+    : phrases.map((p) => ({
         id: p.id,
         content: p.content,
         type: "phrase" as string,
@@ -366,7 +368,7 @@ export default function RadialMenu() {
         { key: "link", label: t("clipboard.link") },
         { key: "file", label: t("clipboard.file") },
       ]
-    : phraseStore.groups.map((g) => ({
+    : phraseGroups.map((g) => ({
         key: g.id,
         label: g.name,
       }));

@@ -24,6 +24,7 @@ interface SettingsState {
   toggleTheme: () => void;
   loadSettings: () => Promise<void>;
   setSetting: (key: string, value: string) => Promise<void>;
+  setSettingsBatch: (settings: Record<string, string>) => Promise<void>;
   setAutostart: (enabled: boolean) => Promise<void>;
 }
 
@@ -53,36 +54,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadSettings: async () => {
     try {
-      const retention = await invoke<string>("get_setting", {
-        key: "clipboard_retention",
-      });
-      const engine = await invoke<string>("get_setting", {
-        key: "default_translate_engine",
-      });
-      const apiUrl = await invoke<string>("get_setting", { key: "ai_api_url" });
-      const apiKey = await invoke<string>("get_setting", { key: "ai_api_key" });
-      const model = await invoke<string>("get_setting", { key: "ai_model" });
-      const baiduAppId = await invoke<string>("get_setting", { key: "baidu_appid" });
-      const baiduSecret = await invoke<string>("get_setting", { key: "baidu_secret" });
-      const googleApiKey = await invoke<string>("get_setting", { key: "google_api_key" });
-      const translateProxy = await invoke<string>("get_setting", { key: "translate_proxy" });
-      const language = await invoke<string>("get_setting", { key: "language" });
-      const shortcutKey = await invoke<string>("get_setting", { key: "shortcut_key" });
-      const radialMenuEnabled = await invoke<string>("get_setting", { key: "radial_menu_enabled" });
+      const settings = await invoke<Record<string, string>>("get_all_settings");
 
       set({
-        clipboardRetention: retention || "1month",
-        defaultEngine: engine || "google",
-        apiUrl: apiUrl || "",
-        apiKey: apiKey || "",
-        model: model || "",
-        baiduAppId: baiduAppId || "",
-        baiduSecret: baiduSecret || "",
-        googleApiKey: googleApiKey || "",
-        translateProxy: translateProxy || "",
-        language: language || "zh-CN",
-        shortcutKey: shortcutKey || "",
-        radialMenuEnabled: radialMenuEnabled !== "0",
+        clipboardRetention: settings.clipboard_retention || "1month",
+        defaultEngine: settings.default_translate_engine || "google",
+        apiUrl: settings.ai_api_url || "",
+        apiKey: settings.ai_api_key || "",
+        model: settings.ai_model || "",
+        baiduAppId: settings.baidu_appid || "",
+        baiduSecret: settings.baidu_secret || "",
+        googleApiKey: settings.google_api_key || "",
+        translateProxy: settings.translate_proxy || "",
+        language: settings.language || "zh-CN",
+        shortcutKey: settings.shortcut_key || "",
+        radialMenuEnabled: settings.radial_menu_enabled !== "0",
       });
 
       // Read autostart state from the OS (plugin)
@@ -100,6 +86,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await invoke("set_setting", { key, value });
     } catch (e) {
       console.error("Failed to save setting:", e);
+    }
+  },
+
+  setSettingsBatch: async (settings: Record<string, string>) => {
+    try {
+      await invoke("set_settings_batch", { settings });
+    } catch (e) {
+      console.error("Failed to batch save settings:", e);
     }
   },
 

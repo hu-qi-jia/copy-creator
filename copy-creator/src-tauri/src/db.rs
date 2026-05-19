@@ -81,6 +81,10 @@ pub fn init_db(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::open(&path)?;
 
     conn.execute_batch(
+        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-8000;",
+    )?;
+
+    conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS clipboard_records (
             id TEXT PRIMARY KEY,
@@ -537,6 +541,26 @@ pub fn get_setting_sync(app: &AppHandle, key: &str) -> Option<String> {
 }
 
 #[tauri::command]
+pub fn get_all_settings(app: AppHandle) -> Result<std::collections::HashMap<String, String>, String> {
+    let state = app.state::<DbState>();
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT key, value FROM settings")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let (k, v) = row.map_err(|e| e.to_string())?;
+        map.insert(k, v);
+    }
+    Ok(map)
+}
+
+#[tauri::command]
 pub fn get_image_base64(app: AppHandle, path: String) -> Result<String, String> {
     let mut base_dir = get_storage_dir(&app);
     base_dir.push(&path);
@@ -606,6 +630,25 @@ pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), Str
         params![key, value],
     )
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_settings_batch(app: AppHandle, settings: std::collections::HashMap<String, String>) -> Result<(), String> {
+    let state = app.state::<DbState>();
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    for (key, value) in &settings {
+        if key == "storage_path" {
+            return migrate_storage(&app, value);
+        }
+    }
+    for (key, value) in &settings {
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2",
+            params![key, value],
+        )
+        .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 

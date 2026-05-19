@@ -120,14 +120,17 @@ export default function SettingsContent({ embedded }: Props) {
   };
 
   const handleSave = async () => {
-    await settings.setSetting("clipboard_retention", localRetention);
-    await settings.setSetting("default_translate_engine", localEngine);
-    await settings.setSetting("ai_api_url", localApiUrl);
-    await settings.setSetting("ai_api_key", localApiKey);
-    await settings.setSetting("ai_model", localModel);
-    await settings.setSetting("google_api_key", localGoogleApiKey);
-    await settings.setSetting("translate_proxy", localTranslateProxy);
-    await settings.setSetting("language", localLang);
+    await settings.setSettingsBatch({
+      clipboard_retention: localRetention,
+      default_translate_engine: localEngine,
+      ai_api_url: localApiUrl,
+      ai_api_key: localApiKey,
+      ai_model: localModel,
+      google_api_key: localGoogleApiKey,
+      translate_proxy: localTranslateProxy,
+      language: localLang,
+    });
+
     const oldKey = settings.shortcutKey;
     const newKey = localShortcutKey;
     if (oldKey !== newKey) {
@@ -152,8 +155,6 @@ export default function SettingsContent({ embedded }: Props) {
       emit("language-changed", { language: localLang });
       invoke("update_tray_language").catch(console.error);
     }
-
-    await settings.loadSettings();
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

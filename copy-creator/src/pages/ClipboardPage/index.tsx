@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useClipboardStore } from "../../stores/clipboardStore";
 import { Icons } from "../../components/Icons";
@@ -39,25 +39,27 @@ export default function ClipboardPage() {
     { key: "file", label: t("clipboard.file") },
   ];
 
-  const getTypeLabel = (type: string): string => {
-    const labels: Record<string, string> = {
-      text: t("clipboard.text"),
-      image: t("clipboard.image"),
-      link: t("clipboard.link"),
-      file: t("clipboard.file"),
-    };
-    return labels[type] || t("clipboard.text");
+  const labels: Record<string, string> = {
+    text: t("clipboard.text"),
+    image: t("clipboard.image"),
+    link: t("clipboard.link"),
+    file: t("clipboard.file"),
   };
 
-  const filtered =
-    category === "all" ? records : records.filter((r) => r.type === category);
+  const getTypeLabel = (type: string): string => labels[type] || labels.text;
+
+  const filtered = useMemo(
+    () => (category === "all" ? records : records.filter((r) => r.type === category)),
+    [records, category],
+  );
 
   useEffect(() => {
     init();
   }, []);
 
   useEffect(() => {
-    loadRecords();
+    const timer = setTimeout(() => loadRecords(), 300);
+    return () => clearTimeout(timer);
   }, [search]);
 
   const handleThumbHover = useCallback((thumbSrc: string, rect: DOMRect) => {
