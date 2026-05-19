@@ -182,6 +182,8 @@ fn write_image_to_clipboard(rgba: &[u8], w: u32, h: u32, png_bytes: &[u8]) -> Re
         }
 
         let bmi = ptr_dib as *mut u8;
+        // Zero the DIB header to avoid garbage biCompression / biClrUsed etc.
+        std::ptr::write_bytes(bmi, 0u8, 40);
         let bmi_header = std::slice::from_raw_parts_mut(bmi as *mut u32, 10);
         bmi_header[0] = 40;
         bmi_header[1] = w;
@@ -190,10 +192,16 @@ fn write_image_to_clipboard(rgba: &[u8], w: u32, h: u32, png_bytes: &[u8]) -> Re
         *(((bmi as *mut u8).add(14)) as *mut u16) = 32;
         *(((bmi as *mut u8).add(20)) as *mut u32) = w * h * 4;
 
+        // Convert RGBA → BGRA (DIB expects BGRA pixel order)
         let pixel_offset = 40;
         let dst = (bmi as *mut u8).add(pixel_offset);
         let src = rgba.as_ptr();
-        std::ptr::copy_nonoverlapping(src, dst, (w * h * 4) as usize);
+        for i in 0..(w * h) as usize {
+            *dst.add(i * 4) = *src.add(i * 4 + 2);       // B = R
+            *dst.add(i * 4 + 1) = *src.add(i * 4 + 1);   // G = G
+            *dst.add(i * 4 + 2) = *src.add(i * 4);       // R = B
+            *dst.add(i * 4 + 3) = *src.add(i * 4 + 3);   // A = A
+        }
         let _ = GlobalUnlock(hmem_dib);
 
         if SetClipboardData(CF_DIB, HANDLE(hmem_dib.0)).is_err() {

@@ -241,6 +241,7 @@ fn read_clipboard_image_raw() -> Option<(Vec<u8>, u32, u32)> {
                     let ptr = GlobalLock(hglobal);
                     if !ptr.is_null() {
                         let header = ptr as *const u32;
+                        let bi_size = *header;
                         let bpp = *((ptr as *const u8).add(14)) as u16;
                         let compression = *header.add(4);
                         let w = *header.add(1) as i32;
@@ -248,7 +249,7 @@ fn read_clipboard_image_raw() -> Option<(Vec<u8>, u32, u32)> {
                         if w > 0 && h > 0 && w < 20000 && h < 20000 {
                             let rgba = if bpp == 32 && compression == 0 {
                                 let pixel_count = (w * h) as usize;
-                                let src = (ptr as *const u8).add(40);
+                                let src = (ptr as *const u8).add(bi_size as usize);
                                 let mut rgba = vec![0u8; pixel_count * 4];
                                 for i in 0..pixel_count {
                                     rgba[i * 4] = *src.add(i * 4 + 2);
@@ -261,7 +262,7 @@ fn read_clipboard_image_raw() -> Option<(Vec<u8>, u32, u32)> {
                                 let full = std::slice::from_raw_parts(ptr as *const u8, size).to_vec();
                                 let _ = GlobalUnlock(hglobal);
                                 let _ = CloseClipboard();
-                                let pixel_offset = 40u32;
+                                let pixel_offset = bi_size;
                                 let file_size = 14 + size as u32;
                                 let mut bmp: Vec<u8> = Vec::with_capacity(file_size as usize);
                                 bmp.extend_from_slice(b"BM");
