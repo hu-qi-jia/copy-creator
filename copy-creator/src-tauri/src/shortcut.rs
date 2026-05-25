@@ -300,7 +300,7 @@ pub fn show_radial_menu(app: AppHandle) -> Result<(), String> {
             use core_graphics::event_source::CGEventSourceStateID::HIDSystemState;
 
             let source = CGEventSource::new(HIDSystemState).ok();
-            let event = CGEvent::new(source.as_ref()).ok();
+            let event = source.and_then(|s| CGEvent::new(s).ok());
             if let Some(ev) = event {
                 let loc = ev.location();
                 let scale = window.scale_factor().unwrap_or(2.0);
@@ -386,7 +386,7 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
             use core_graphics::event_source::CGEventSourceStateID::HIDSystemState;
 
             let source = CGEventSource::new(HIDSystemState).ok();
-            let event = CGEvent::new(source.as_ref()).ok();
+            let event = source.and_then(|s| CGEvent::new(s).ok());
             if let Some(ev) = event {
                 let loc = ev.location();
                 let scale = window.scale_factor().unwrap_or(2.0);
