@@ -25,6 +25,20 @@
         "center": true,
         "transparent": true,
         "shadow": true
+      },
+      {
+        "label": "radial-menu",
+        "url": "index.html?radial=1",
+        "title": "",
+        "width": 300,
+        "height": 420,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "shadow": true,
+        "skipTaskbar": true
       }
     ],
     "security": {

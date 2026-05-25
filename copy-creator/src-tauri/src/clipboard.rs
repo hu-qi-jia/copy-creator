@@ -629,7 +629,7 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
 
         let mut image_data: Option<(Vec<u8>, u32, u32)> = None;
         // Track whether the image hash stayed the same (re-copy of same image)
-        let mut image_is_same = false;
+        let image_is_same = false;
 
         // Stable dedup: hash raw clipboard bytes (deterministic) rather than RGBA
         #[cfg(target_os = "windows")]

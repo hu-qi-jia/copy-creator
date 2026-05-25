@@ -210,9 +210,10 @@ unsafe extern "system" fn mouse_hook_callback(
     unsafe { CallNextHookEx(hook, n_code, w_param, l_param) }
 }
 
-pub fn install_mouse_hook(app: &AppHandle) {
+pub fn install_mouse_hook(_app: &AppHandle) {
     #[cfg(target_os = "windows")]
     {
+        let app = _app;
         // Restore persisted radial menu enabled state
         if let Ok(val) = crate::db::get_setting(app.clone(), "radial_menu_enabled".to_string()) {
             RADIAL_MENU_ENABLED.store(val == "1", Ordering::SeqCst);

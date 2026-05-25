@@ -89,7 +89,7 @@ fn apply_vibrancy_effect(window: &tauri::WebviewWindow) {
         let _: () = msg_send![effect_view, setAutoresizingMask: 18u64];
 
         // Make the effect view fill the content view and send it to back
-        let _: () = msg_send![content_view, addSubview: effect_view positioned: -2usize relativeTo: std::ptr::null::<Object>()];
+        let _: () = msg_send![content_view, addSubview: effect_view positioned: -2i64 relativeTo: std::ptr::null::<Object>()];
 
         log::info!("apply_vibrancy_effect: NSVisualEffectView applied");
     }
@@ -164,25 +164,9 @@ pub fn run() {
 
             shortcut::install_mouse_hook(app.handle());
 
-            // Create hidden radial menu popup window
+            // Configure radial menu popup window (defined in tauri.conf.json)
             {
-                use tauri::WebviewWindowBuilder;
-                use tauri::WebviewUrl;
-                let radial = WebviewWindowBuilder::new(
-                    app,
-                    "radial-menu",
-                    WebviewUrl::App("index.html?radial=1".into()),
-                )
-                .title("")
-                .inner_size(300.0, 420.0)
-                .decorations(false)
-                .transparent(true)
-                .always_on_top(true)
-                .visible(false)
-                .shadow(true)
-                .skip_taskbar(true)
-                .resizable(false)
-                .build()?;
+                let radial = app.get_webview_window("radial-menu").unwrap();
                 let _ = radial.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
                 #[cfg(target_os = "windows")]
                 apply_backdrop_effect(&radial);

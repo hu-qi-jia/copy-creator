@@ -184,9 +184,9 @@ fn paste_with_defocus(app: &AppHandle) -> Result<(), String> {
     {
         enigo.key(Key::Meta, Direction::Press).map_err(|e| e.to_string())?;
         thread::sleep(Duration::from_millis(30));
-        enigo.key(Key::V, Direction::Press).map_err(|e| e.to_string())?;
+        enigo.key(Key::Unicode('v'), Direction::Press).map_err(|e| e.to_string())?;
         thread::sleep(Duration::from_millis(10));
-        enigo.key(Key::V, Direction::Release).map_err(|e| e.to_string())?;
+        enigo.key(Key::Unicode('v'), Direction::Release).map_err(|e| e.to_string())?;
         thread::sleep(Duration::from_millis(10));
         enigo.key(Key::Meta, Direction::Release).map_err(|e| e.to_string())?;
     }
@@ -413,7 +413,7 @@ pub fn paste_image(app: AppHandle, path: String) -> Result<(), String> {
     std::thread::spawn(move || {
         let _guard = PasteGuard;
 
-        let (rgba, w, h, png) = {
+        let (rgba, w, h, _png) = {
             let cache = get_image_cache().lock().unwrap();
             if let Some(cached) = cache.map.get(&path) {
                 (cached.rgba.clone(), cached.width, cached.height, cached.png_bytes.clone())
