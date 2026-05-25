@@ -23,6 +23,9 @@ pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let lang = crate::db::get_setting_sync(app, "language").unwrap_or_else(|| "zh-CN".to_string());
     let menu = build_tray_menu(app, &lang)?;
 
+    #[cfg(target_os = "macos")]
+    let icon_bytes = include_bytes!("../icons/32x32.png");
+    #[cfg(not(target_os = "macos"))]
     let icon_bytes = include_bytes!("../icons/icon.png");
     let img = image::load_from_memory(icon_bytes)
         .expect("Failed to decode tray icon")

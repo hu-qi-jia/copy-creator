@@ -49,6 +49,52 @@ fn apply_backdrop_effect(window: &tauri::WebviewWindow) {
     }
 }
 
+/// macOS: apply vibrancy (frosted glass) effect using NSVisualEffectView.
+#[cfg(target_os = "macos")]
+fn apply_vibrancy_effect(window: &tauri::WebviewWindow) {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+    use cocoa::base::id;
+
+    unsafe {
+        // Get the native NSWindow handle via Tauri's ns_window() method
+        let ns_window_raw = match window.ns_window() {
+            Ok(h) => h as *mut Object,
+            Err(e) => {
+                log::warn!("apply_vibrancy_effect: failed to get ns_window: {}", e);
+                return;
+            }
+        };
+
+        // Get the window's content view
+        let content_view: id = msg_send![ns_window_raw, contentView];
+        if content_view.is_null() {
+            log::warn!("apply_vibrancy_effect: content view is null");
+            return;
+        }
+
+        // Create NSVisualEffectView
+        let ns_vev_class = Class::get("NSVisualEffectView").unwrap();
+        let frame: id = msg_send![content_view, bounds];
+        let effect_view: id = msg_send![ns_vev_class, alloc];
+        let effect_view: id = msg_send![effect_view, initWithFrame: frame];
+
+        // NSVisualEffectBlendingModeBehindWindow = 0
+        let _: () = msg_send![effect_view, setBlendingMode: 0usize];
+        // NSVisualEffectMaterialHudWindow = 23 (suitable for floating tool windows)
+        let _: () = msg_send![effect_view, setMaterial: 23usize];
+        // NSVisualEffectStateActive = 1
+        let _: () = msg_send![effect_view, setState: 1usize];
+        // Auto-resize with superview (width + height flexible)
+        let _: () = msg_send![effect_view, setAutoresizingMask: 18u64];
+
+        // Make the effect view fill the content view and send it to back
+        let _: () = msg_send![content_view, addSubview: effect_view positioned: -2usize relativeTo: std::ptr::null::<Object>()];
+
+        log::info!("apply_vibrancy_effect: NSVisualEffectView applied");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -79,6 +125,14 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
                     apply_backdrop_effect(&window);
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+                    apply_vibrancy_effect(&window);
                 }
             }
 
@@ -132,6 +186,8 @@ pub fn run() {
                 let _ = radial.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
                 #[cfg(target_os = "windows")]
                 apply_backdrop_effect(&radial);
+                #[cfg(target_os = "macos")]
+                apply_vibrancy_effect(&radial);
                 log::info!("Radial menu popup window created");
             }
 

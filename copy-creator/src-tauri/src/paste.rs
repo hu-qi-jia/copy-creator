@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, Ordering};
 use std::ptr;
 
 pub static PASTING: AtomicBool = AtomicBool::new(false);
@@ -12,6 +12,26 @@ pub fn save_foreground_window() {
     unsafe {
         let hwnd = GetForegroundWindow();
         LAST_FOREGROUND_HWND.store(hwnd.0, Ordering::SeqCst);
+    }
+}
+
+/// macOS: save the PID of the currently frontmost application.
+#[cfg(target_os = "macos")]
+static LAST_FOREGROUND_PID: AtomicI32 = AtomicI32::new(0);
+
+#[cfg(target_os = "macos")]
+pub fn save_foreground_window() {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+
+    unsafe {
+        let ns_workspace = Class::get("NSWorkspace").unwrap();
+        let shared: *mut Object = msg_send![ns_workspace, sharedWorkspace];
+        let app: *mut Object = msg_send![shared, frontmostApplication];
+        if !app.is_null() {
+            let pid: i32 = msg_send![app, processIdentifier];
+            LAST_FOREGROUND_PID.store(pid, Ordering::SeqCst);
+        }
     }
 }
 
@@ -98,6 +118,25 @@ fn paste_with_defocus(app: &AppHandle) -> Result<(), String> {
         if !last_hwnd.is_null() {
             unsafe {
                 let _ = SetForegroundWindow(HWND(last_hwnd));
+            }
+        }
+    }
+
+    // macOS: restore the previously-saved foreground application
+    #[cfg(target_os = "macos")]
+    {
+        let pid = LAST_FOREGROUND_PID.load(Ordering::SeqCst);
+        if pid > 0 {
+            use objc::runtime::{Class, Object};
+            use objc::{msg_send, sel, sel_impl};
+
+            unsafe {
+                let ns_running_app = Class::get("NSRunningApplication").unwrap();
+                let app: *mut Object = msg_send![ns_running_app, runningApplicationWithProcessIdentifier: pid];
+                if !app.is_null() {
+                    // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+                    let _: bool = msg_send![app, activateWithOptions: 2usize];
+                }
             }
         }
     }
@@ -302,6 +341,45 @@ fn write_files_to_clipboard(paths: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// macOS: write file URLs to the clipboard via NSPasteboard.
+/// This enables proper file paste in Finder and other apps.
+#[cfg(target_os = "macos")]
+fn write_files_to_clipboard_macos(paths: &[String]) -> Result<(), String> {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+    use cocoa::base::id;
+    use cocoa::foundation::NSArray;
+
+    unsafe {
+        let ns_pasteboard = Class::get("NSPasteboard").unwrap();
+        let general: *mut Object = msg_send![ns_pasteboard, generalPasteboard];
+
+        // Clear the pasteboard
+        let _: usize = msg_send![general, clearContents];
+
+        // Create NSURL array from file paths
+        let ns_url_class = Class::get("NSURL").unwrap();
+        let ns_string_class = Class::get("NSString").unwrap();
+
+        let url_array: id = msg_send![NSArray, array];
+        for path in paths {
+            let path_str: id = msg_send![ns_string_class,
+                stringWithUTF8String: path.as_ptr() as *const std::os::raw::c_char
+            ];
+            let url: id = msg_send![ns_url_class, fileURLWithPath: path_str];
+            let _: () = msg_send![url_array, addObject: url];
+        }
+
+        // writeObjects: — paste the file URLs
+        let result: bool = msg_send![general, writeObjects: url_array];
+        if !result {
+            return Err("NSPasteboard writeObjects failed".to_string());
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub fn paste_text(app: AppHandle, text: String) -> Result<(), String> {
     if PASTING.swap(true, Ordering::SeqCst) {
@@ -419,7 +497,15 @@ pub fn paste_file(app: AppHandle, path: String) -> Result<(), String> {
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            if let Err(e) = write_files_to_clipboard_macos(&[path.clone()]) {
+                log::error!("paste_file: write clipboard error: {}", e);
+                return;
+            }
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             if let Err(e) = handle.clipboard().write_text(&path) {
                 log::error!("paste_file: write clipboard error: {}", e);

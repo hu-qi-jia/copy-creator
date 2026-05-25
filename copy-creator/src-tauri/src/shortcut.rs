@@ -79,6 +79,11 @@ pub fn toggle_window(app: &AppHandle) {
                 }
             }
 
+            #[cfg(target_os = "macos")]
+            {
+                crate::paste::save_foreground_window();
+            }
+
             log::info!("[toggle_window] showing window");
             let _ = window.show();
             let _ = window.set_focus();

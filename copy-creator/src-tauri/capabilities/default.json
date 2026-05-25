@@ -12,6 +12,8 @@
     "core:window:allow-hide",
     "core:window:allow-minimize",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-background-color",
+    "core:window:allow-set-skip-taskbar",
     "clipboard-manager:default",
     "global-shortcut:default",
     "process:default",

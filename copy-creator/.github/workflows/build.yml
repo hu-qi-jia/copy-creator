@@ -1,0 +1,84 @@
+name: Build Copy Creator
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      DIST_DIR: ${{ github.workspace }}/dist
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+      - name: Collect DMG
+        run: |
+          mkdir -p "$DIST_DIR"
+          # Tauri outputs DMG to src-tauri/target/release/bundle/dmg/
+          find src-tauri/target/release/bundle/dmg -name "*.dmg" -exec cp {} "$DIST_DIR/" \; 2>/dev/null || true
+          # Also collect .app bundle if no DMG found
+          if [ -z "$(ls "$DIST_DIR"/*.dmg 2>/dev/null)" ]; then
+            echo "No DMG found, looking for .app bundle..."
+            find src-tauri/target/release/bundle -name "*.app" -type d -exec cp -R {} "$DIST_DIR/" \; 2>/dev/null || true
+          fi
+          echo "=== Build artifacts ==="
+          ls -la "$DIST_DIR"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Copy-Creator-macOS
+          path: dist/*
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

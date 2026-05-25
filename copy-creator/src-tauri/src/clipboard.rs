@@ -356,6 +356,8 @@ pub static LAST_CLIPBOARD_TEXT: std::sync::Mutex<String> = std::sync::Mutex::new
 pub static LAST_CLIPBOARD_IMAGE_HASH: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
 #[cfg(target_os = "windows")]
 pub static LAST_CLIPBOARD_FILES_KEY: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+#[cfg(target_os = "macos")]
+pub static LAST_CLIPBOARD_FILES_KEY: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
 /// Windows clipboard sequence number — increments on every clipboard change,
 /// even if content is identical. Used to detect re-copies of the same content.
@@ -366,6 +368,78 @@ static LAST_CLIPBOARD_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::Ato
 fn get_clipboard_sequence() -> u32 {
     use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
     unsafe { GetClipboardSequenceNumber() }
+}
+
+/// macOS clipboard change count — equivalent of Windows sequence number.
+/// NSPasteboard.generalPasteboard.changeCount increments on every write.
+#[cfg(target_os = "macos")]
+static LAST_CHANGE_COUNT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+#[cfg(target_os = "macos")]
+fn get_clipboard_change_count() -> i64 {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+
+    unsafe {
+        let ns_pasteboard = Class::get("NSPasteboard").unwrap();
+        let general: *mut Object = msg_send![ns_pasteboard, generalPasteboard];
+        let count: i64 = msg_send![general, changeCount];
+        count
+    }
+}
+
+/// macOS: read file paths from the clipboard via NSPasteboard.
+#[cfg(target_os = "macos")]
+fn read_clipboard_files() -> Option<Vec<String>> {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+    use cocoa::base::id;
+    use cocoa::foundation::NSArray;
+
+    unsafe {
+        let ns_pasteboard = Class::get("NSPasteboard").unwrap();
+        let general: *mut Object = msg_send![ns_pasteboard, generalPasteboard];
+
+        // Create array with NSURL class for type filtering
+        let ns_url_class = Class::get("NSURL").unwrap();
+        let class_array: id = msg_send![NSArray, arrayWithObject: ns_url_class];
+
+        // readObjectsForClasses:options:
+        let nil: id = std::ptr::null_mut();
+        let objects: id = msg_send![general, readObjectsForClasses: class_array options: nil];
+        if objects.is_null() {
+            return None;
+        }
+
+        let count: usize = msg_send![objects, count];
+        if count == 0 {
+            return None;
+        }
+
+        let mut paths = Vec::new();
+        for i in 0..count {
+            let url: id = msg_send![objects, objectAtIndex: i];
+            if url.is_null() {
+                continue;
+            }
+            let path: id = msg_send![url, path];
+            if path.is_null() {
+                continue;
+            }
+            let cstr: *const std::os::raw::c_char = msg_send![path, UTF8String];
+            if !cstr.is_null() {
+                if let Ok(s) = std::ffi::CStr::from_ptr(cstr).to_str() {
+                    paths.push(s.to_string());
+                }
+            }
+        }
+
+        if paths.is_empty() {
+            None
+        } else {
+            Some(paths)
+        }
+    }
 }
 
 /// Insert a new record into the DB and emit clipboard-update.
@@ -438,6 +512,22 @@ pub fn sync_monitor_cache(handle: &AppHandle) {
         }
         LAST_CLIPBOARD_SEQ.store(get_clipboard_sequence(), Ordering::SeqCst);
     }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Sync image hash
+        if let Ok(image) = handle.clipboard().read_image() {
+            let rgba = image.rgba();
+            if !rgba.is_empty() && image.width() > 0 && image.height() > 0 {
+                let hash = rgba.iter().fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                *LAST_CLIPBOARD_IMAGE_HASH.lock().unwrap() = hash;
+            }
+        }
+        if let Some(files) = read_clipboard_files() {
+            *LAST_CLIPBOARD_FILES_KEY.lock().unwrap() = files.join("|");
+        }
+        LAST_CHANGE_COUNT.store(get_clipboard_change_count(), Ordering::SeqCst);
+    }
 }
 
 pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -455,6 +545,18 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
         *LAST_CLIPBOARD_IMAGE_HASH.lock().unwrap() = get_clipboard_image_hash();
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        // Initialize image hash from current clipboard
+        if let Ok(image) = handle.clipboard().read_image() {
+            let rgba = image.rgba();
+            if !rgba.is_empty() && image.width() > 0 && image.height() > 0 {
+                let hash = rgba.iter().fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                *LAST_CLIPBOARD_IMAGE_HASH.lock().unwrap() = hash;
+            }
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
         let key = read_clipboard_files()
@@ -462,6 +564,15 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
             .unwrap_or_default();
         *LAST_CLIPBOARD_FILES_KEY.lock().unwrap() = key;
         LAST_CLIPBOARD_SEQ.store(get_clipboard_sequence(), Ordering::SeqCst);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let key = read_clipboard_files()
+            .map(|files| files.join("|"))
+            .unwrap_or_default();
+        *LAST_CLIPBOARD_FILES_KEY.lock().unwrap() = key;
+        LAST_CHANGE_COUNT.store(get_clipboard_change_count(), Ordering::SeqCst);
     }
 
     std::thread::spawn(move || {
@@ -495,7 +606,18 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                     false
                 }
             }
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(target_os = "macos")]
+            {
+                let current_count = get_clipboard_change_count();
+                let last_count = LAST_CHANGE_COUNT.load(Ordering::SeqCst);
+                if current_count != last_count {
+                    LAST_CHANGE_COUNT.store(current_count, Ordering::SeqCst);
+                    true
+                } else {
+                    false
+                }
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             { false }
         };
 
@@ -531,11 +653,11 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
 
         #[cfg(not(target_os = "windows"))]
         {
-            // Non-Windows: use plugin-based image read with RGBA hash
+            // Non-Windows: use plugin-based image read with full RGBA hash
             if let Ok(image) = handle.clipboard().read_image() {
                 let rgba = image.rgba();
                 if !rgba.is_empty() && image.width() > 0 && image.height() > 0 {
-                    let hash = rgba.iter().take(400).fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                    let hash = rgba.iter().fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
                     let mut cached_hash = LAST_CLIPBOARD_IMAGE_HASH.lock().unwrap();
                     if hash != *cached_hash {
                         *cached_hash = hash;
@@ -635,12 +757,31 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                     log::warn!("clipboard: image_is_same but read_clipboard_image_raw failed, record lost");
                 }
             }
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(image) = handle.clipboard().read_image() {
+                    let rgba = image.rgba();
+                    if !rgba.is_empty() && image.width() > 0 && image.height() > 0 {
+                        let content_hash: u64 = rgba.iter()
+                            .fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                        let content_hash_str = format!("{:016x}", content_hash);
+                        let relative = format!("images/{}.png", content_hash_str);
+                        insert_and_emit(&handle, "image", &relative);
+                    }
+                }
+            }
             sync_monitor_cache(&handle);
         } else if image_recorded {
             if let Ok(text) = handle.clipboard().read_text() {
                 *LAST_CLIPBOARD_TEXT.lock().unwrap() = text.trim().to_string();
             }
             #[cfg(target_os = "windows")]
+            {
+                if let Some(files) = read_clipboard_files() {
+                    *LAST_CLIPBOARD_FILES_KEY.lock().unwrap() = files.join("|");
+                }
+            }
+            #[cfg(target_os = "macos")]
             {
                 if let Some(files) = read_clipboard_files() {
                     *LAST_CLIPBOARD_FILES_KEY.lock().unwrap() = files.join("|");
@@ -694,6 +835,42 @@ pub fn start_monitor(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                             }
                             insert_and_emit(&handle, "file", &file_path);
                         }
+                    }
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(files) = read_clipboard_files() {
+                    let key = files.join("|");
+                    {
+                        let mut cached = LAST_CLIPBOARD_FILES_KEY.lock().unwrap();
+                        if key == *cached {
+                            // Same file paths re-copied — insert new records
+                            for file_path in &files {
+                                if file_path.trim().is_empty() { continue; }
+                                if is_previewable_image_file(file_path) || is_image_file(file_path) {
+                                    import_image_file(&handle, file_path);
+                                    continue;
+                                }
+                                insert_and_emit(&handle, "file", file_path);
+                            }
+                            continue;
+                        }
+                        *cached = key.clone();
+                    }
+
+                    for file_path in files {
+                        if file_path.trim().is_empty() {
+                            continue;
+                        }
+                        if is_previewable_image_file(&file_path) || is_image_file(&file_path) {
+                            if import_image_file(&handle, &file_path) {
+                                continue;
+                            }
+                            continue;
+                        }
+                        insert_and_emit(&handle, "file", &file_path);
                     }
                 }
             }
