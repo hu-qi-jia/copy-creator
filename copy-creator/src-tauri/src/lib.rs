@@ -89,7 +89,7 @@ fn apply_vibrancy_effect(window: &tauri::WebviewWindow) {
         let _: () = msg_send![effect_view, setAutoresizingMask: 18u64];
 
         // Make the effect view fill the content view and send it to back
-        let _: () = msg_send![content_view, addSubview: effect_view positioned: -2i64 relativeTo: std::ptr::null::<Object>()];
+        let _: () = msg_send![content_view, addSubview: effect_view positioned: -1i64 relativeTo: std::ptr::null::<Object>()];
 
         log::info!("apply_vibrancy_effect: NSVisualEffectView applied");
     }
