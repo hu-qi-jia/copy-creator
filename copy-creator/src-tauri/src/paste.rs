@@ -348,7 +348,6 @@ fn write_files_to_clipboard_macos(paths: &[String]) -> Result<(), String> {
     use objc::runtime::{Class, Object};
     use objc::{msg_send, sel, sel_impl};
     use cocoa::base::id;
-    use cocoa::foundation::NSArray;
 
     unsafe {
         let ns_pasteboard = Class::get("NSPasteboard").unwrap();
@@ -357,11 +356,12 @@ fn write_files_to_clipboard_macos(paths: &[String]) -> Result<(), String> {
         // Clear the pasteboard
         let _: usize = msg_send![general, clearContents];
 
-        // Create NSURL array from file paths
+        // Create NSMutableArray for file URLs
         let ns_url_class = Class::get("NSURL").unwrap();
         let ns_string_class = Class::get("NSString").unwrap();
+        let ns_mutable_array_class = Class::get("NSMutableArray").unwrap();
 
-        let url_array: id = msg_send![NSArray, array];
+        let url_array: id = msg_send![ns_mutable_array_class, array];
         for path in paths {
             let path_str: id = msg_send![ns_string_class,
                 stringWithUTF8String: path.as_ptr() as *const std::os::raw::c_char

@@ -394,7 +394,6 @@ fn read_clipboard_files() -> Option<Vec<String>> {
     use objc::runtime::{Class, Object};
     use objc::{msg_send, sel, sel_impl};
     use cocoa::base::id;
-    use cocoa::foundation::NSArray;
 
     unsafe {
         let ns_pasteboard = Class::get("NSPasteboard").unwrap();
@@ -402,7 +401,8 @@ fn read_clipboard_files() -> Option<Vec<String>> {
 
         // Create array with NSURL class for type filtering
         let ns_url_class = Class::get("NSURL").unwrap();
-        let class_array: id = msg_send![NSArray, arrayWithObject: ns_url_class];
+        let ns_array_class = Class::get("NSArray").unwrap();
+        let class_array: id = msg_send![ns_array_class, arrayWithObject: ns_url_class];
 
         // readObjectsForClasses:options:
         let nil: id = std::ptr::null_mut();
