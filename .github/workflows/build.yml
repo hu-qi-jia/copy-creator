@@ -38,7 +38,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
+            copy-creator/src-tauri/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
@@ -46,18 +46,21 @@ jobs:
       - name: Cache pnpm dependencies
         uses: actions/cache@v4
         with:
-          path: node_modules
+          path: copy-creator/node_modules
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
+        working-directory: copy-creator
         run: pnpm install
 
       - name: Build Tauri app
+        working-directory: copy-creator
         run: pnpm tauri build
 
       - name: Collect DMG
+        working-directory: copy-creator
         run: |
           mkdir -p "$DIST_DIR"
           # Tauri outputs DMG to src-tauri/target/release/bundle/dmg/
