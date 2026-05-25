@@ -74,24 +74,25 @@ fn apply_vibrancy_effect(window: &tauri::WebviewWindow) {
         }
 
         // Create NSVisualEffectView
-        let ns_vev_class = Class::get("NSVisualEffectView").unwrap();
-        let frame: id = msg_send![content_view, bounds];
-        let effect_view: id = msg_send![ns_vev_class, alloc];
-        let effect_view: id = msg_send![effect_view, initWithFrame: frame];
+        if let Some(ns_vev_class) = Class::get("NSVisualEffectView") {
+            let frame: id = msg_send![content_view, bounds];
+            let effect_view: id = msg_send![ns_vev_class, alloc];
+            let effect_view: id = msg_send![effect_view, initWithFrame: frame];
 
-        // NSVisualEffectBlendingModeBehindWindow = 0
-        let _: () = msg_send![effect_view, setBlendingMode: 0usize];
-        // NSVisualEffectMaterialHudWindow = 23 (suitable for floating tool windows)
-        let _: () = msg_send![effect_view, setMaterial: 23usize];
-        // NSVisualEffectStateActive = 1
-        let _: () = msg_send![effect_view, setState: 1usize];
-        // Auto-resize with superview (width + height flexible)
-        let _: () = msg_send![effect_view, setAutoresizingMask: 18u64];
+            // NSVisualEffectBlendingModeBehindWindow = 0
+            let _: () = msg_send![effect_view, setBlendingMode: 0usize];
+            // NSVisualEffectMaterialHudWindow = 23 (suitable for floating tool windows)
+            let _: () = msg_send![effect_view, setMaterial: 23usize];
+            // NSVisualEffectStateActive = 1
+            let _: () = msg_send![effect_view, setState: 1usize];
+            // Auto-resize with superview (width + height flexible)
+            let _: () = msg_send![effect_view, setAutoresizingMask: 18u64];
 
-        // Make the effect view fill the content view and send it to back
-        let _: () = msg_send![content_view, addSubview: effect_view positioned: -1i64 relativeTo: std::ptr::null::<Object>()];
+            // Make the effect view fill the content view and send it to back
+            let _: () = msg_send![content_view, addSubview: effect_view positioned: -1i64 relativeTo: std::ptr::null::<Object>()];
 
-        log::info!("apply_vibrancy_effect: NSVisualEffectView applied");
+            log::info!("apply_vibrancy_effect: NSVisualEffectView applied");
+        }
     }
 }
 
