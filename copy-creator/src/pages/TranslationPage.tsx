@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useTranslationStore } from "../stores/translationStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { Icons } from "../components/Icons";
 import IosSelect from "../components/IosSelect";
 import { useState } from "react";
@@ -20,6 +21,7 @@ const LANGUAGES = [
 
 export default function TranslationPage() {
   const { t } = useTranslation();
+  const setSetting = useSettingsStore((s) => s.setSetting);
   const {
     inputText,
     targetLang,
@@ -31,6 +33,12 @@ export default function TranslationPage() {
     setTargetLang,
     translate,
   } = useTranslationStore();
+
+  // Persist target language so the shortcut translate popup can read it
+  const handleTargetLangChange = (lang: string) => {
+    setTargetLang(lang);
+    setSetting("translate_target_lang", lang);
+  };
 
   const [copied, setCopied] = useState(false);
 
@@ -87,7 +95,7 @@ export default function TranslationPage() {
           <IosSelect
             value={targetLang}
             options={LANGUAGES.map((l) => ({ value: l.code, label: l.name }))}
-            onChange={setTargetLang}
+            onChange={handleTargetLangChange}
           />
         </div>
       </div>

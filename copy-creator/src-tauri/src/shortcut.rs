@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
 static RADIAL_MENU_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -349,16 +350,74 @@ pub fn update_radial_keyboard_shortcut(
     Ok(())
 }
 
+/// Capture selected text by simulating copy (Cmd+C / Ctrl+C).
+/// Saves and restores clipboard to be polite to the user.
+fn capture_selected_text(app: &AppHandle) -> String {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+
+    // Save current clipboard
+    let saved = app.clipboard().read_text().unwrap_or_default();
+
+    // Simulate copy
+    let mut enigo = match Enigo::new(&Settings::default()) {
+        Ok(e) => e,
+        Err(_) => return String::new(),
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = enigo.key(Key::Meta, Direction::Press);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let _ = enigo.key(Key::Unicode('c'), Direction::Press);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _ = enigo.key(Key::Unicode('c'), Direction::Release);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _ = enigo.key(Key::Meta, Direction::Release);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = enigo.key(Key::Control, Direction::Press);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let _ = enigo.key(Key::C, Direction::Click);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _ = enigo.key(Key::Control, Direction::Release);
+    }
+
+    // Wait for clipboard to receive the copied text
+    std::thread::sleep(std::time::Duration::from_millis(60));
+
+    let captured = app.clipboard().read_text()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    // Restore original clipboard if we captured something different
+    if !captured.is_empty() && captured != saved {
+        let _ = app.clipboard().write_text(&saved);
+    }
+
+    captured
+}
+
 #[tauri::command]
 pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
 
-    let clipboard_text = app.clipboard().read_text()
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
+    // First try to capture currently selected text, fall back to clipboard
+    let selected_text = capture_selected_text(&app);
+    let text_to_translate = if !selected_text.is_empty() {
+        log::info!("[show_translate_popup] using captured selected text: {} chars", selected_text.len());
+        selected_text
+    } else {
+        let clipboard_text = app.clipboard().read_text()
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        log::info!("[show_translate_popup] falling back to clipboard: {} chars", clipboard_text.len());
+        clipboard_text
+    };
 
-    if clipboard_text.is_empty() {
-        log::info!("[show_translate_popup] clipboard is empty");
+    if text_to_translate.is_empty() {
+        log::info!("[show_translate_popup] no text to translate");
         return Ok(());
     }
 
@@ -372,7 +431,7 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
             let mut point = POINT { x: 0, y: 0 };
             unsafe { GetCursorPos(&mut point).ok().unwrap_or_default(); }
             let scale = window.scale_factor().unwrap_or(1.0);
-            let half_w = (180.0 * scale) as i32;
+            let half_w = (190.0 * scale) as i32;
             let top_off = (10.0 * scale) as i32;
             let _ = window.set_position(tauri::Position::Physical(
                 tauri::PhysicalPosition::new(point.x - half_w, point.y - top_off),
@@ -390,7 +449,7 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
             if let Some(ev) = event {
                 let loc = ev.location();
                 let scale = window.scale_factor().unwrap_or(2.0);
-                let half_w = (180.0 * scale) as f64;
+                let half_w = (190.0 * scale) as f64;
                 let top_off = (10.0 * scale) as f64;
                 let x = (loc.x - half_w) / scale as f64;
                 let y = (loc.y - top_off) / scale as f64;
@@ -400,7 +459,7 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
             }
         }
 
-        let _ = app.emit("translate-popup-text", &clipboard_text);
+        let _ = app.emit("translate-popup-text", &text_to_translate);
 
         let _ = window.show();
         let _ = window.set_focus();
