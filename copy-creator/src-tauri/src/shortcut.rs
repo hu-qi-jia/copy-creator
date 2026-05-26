@@ -424,6 +424,54 @@ fn capture_selected_text(app: &AppHandle) -> String {
     captured
 }
 
+/// Clamp proposed window position so the window stays fully within the containing monitor.
+fn clamp_to_monitor_bounds(
+    window: &tauri::WebviewWindow,
+    proposed_x: i32,
+    proposed_y: i32,
+) -> (i32, i32) {
+    const MARGIN: i32 = 8;
+
+    let win_size = match window.outer_size() {
+        Ok(s) => s,
+        Err(_) => return (proposed_x, proposed_y),
+    };
+    let win_w = win_size.width as i32;
+    let win_h = win_size.height as i32;
+
+    let monitors = match window.available_monitors() {
+        Ok(m) => m,
+        Err(_) => return (proposed_x, proposed_y),
+    };
+
+    for monitor in monitors {
+        let pos = monitor.position();
+        let size = monitor.size();
+        let mon_x = pos.x;
+        let mon_y = pos.y;
+        let mon_w = size.width as i32;
+        let mon_h = size.height as i32;
+
+        if proposed_x >= mon_x
+            && proposed_x < mon_x + mon_w
+            && proposed_y >= mon_y
+            && proposed_y < mon_y + mon_h
+        {
+            let min_x = mon_x + MARGIN;
+            let max_x = mon_x + mon_w - win_w - MARGIN;
+            let min_y = mon_y + MARGIN;
+            let max_y = mon_y + mon_h - win_h - MARGIN;
+
+            return (
+                proposed_x.clamp(min_x, max_x.max(min_x)),
+                proposed_y.clamp(min_y, max_y.max(min_y)),
+            );
+        }
+    }
+
+    (proposed_x, proposed_y)
+}
+
 #[tauri::command]
 pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
     // Spawn on a background thread so the shortcut handler returns immediately.
@@ -465,8 +513,11 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
                 let scale = window.scale_factor().unwrap_or(1.0);
                 let half_w = (190.0 * scale) as i32;
                 let top_off = (10.0 * scale) as i32;
+                let raw_x = point.x - half_w;
+                let raw_y = point.y - top_off;
+                let (x, y) = clamp_to_monitor_bounds(&window, raw_x, raw_y);
                 let _ = window.set_position(tauri::Position::Physical(
-                    tauri::PhysicalPosition::new(point.x - half_w, point.y - top_off),
+                    tauri::PhysicalPosition::new(x, y),
                 ));
             }
 
@@ -483,10 +534,12 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
                     let scale = window.scale_factor().unwrap_or(2.0);
                     let half_w = (190.0 * scale) as f64;
                     let top_off = (10.0 * scale) as f64;
-                    let x = (loc.x - half_w) / scale as f64;
-                    let y = (loc.y - top_off) / scale as f64;
+                    // CGEvent location is in logical points; multiply by scale for physical pixels
+                    let raw_x = (loc.x * scale - half_w) as i32;
+                    let raw_y = (loc.y * scale - top_off) as i32;
+                    let (x, y) = clamp_to_monitor_bounds(&window, raw_x, raw_y);
                     let _ = window.set_position(tauri::Position::Physical(
-                        tauri::PhysicalPosition::new(x as i32, y as i32),
+                        tauri::PhysicalPosition::new(x, y),
                     ));
                 }
             }
