@@ -41,6 +41,7 @@
     "dark": "Dark",
     "language": "Language",
     "startup": "Launch at Startup",
+    "hideDock": "Hide from Dock",
     "shortcut": "Shortcuts",
     "windowShortcut": "Show Window Shortcut",
     "radialShortcut": "Quick Menu Shortcut",

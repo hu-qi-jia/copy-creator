@@ -10,6 +10,32 @@ use tauri::Manager;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::Shortcut as GShortcut;
 
+/// macOS: set app activation policy to show/hide from Dock at runtime.
+#[cfg(target_os = "macos")]
+fn set_activation_policy(accessory: bool) {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+
+    unsafe {
+        let ns_app_class = Class::get("NSApplication").unwrap();
+        let app: *mut Object = msg_send![ns_app_class, sharedApplication];
+        // NSApplicationActivationPolicyAccessory = 1, Regular = 0
+        let policy: usize = if accessory { 1 } else { 0 };
+        let _: bool = msg_send![app, setActivationPolicy: policy];
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_activation_policy(_accessory: bool) {}
+
+#[tauri::command]
+fn set_hide_dock_icon(app: tauri::AppHandle, hide: bool) -> Result<(), String> {
+    set_activation_policy(hide);
+    db::set_setting(app, "hide_dock_icon".to_string(), if hide { "1".to_string() } else { "0".to_string() })
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(target_os = "windows")]
 fn apply_backdrop_effect(window: &tauri::WebviewWindow) {
     use windows::Win32::Foundation::HWND;
@@ -208,6 +234,13 @@ pub fn run() {
             db::init_db(app.handle())?;
             db::prune_old_records(app.handle()).ok();
 
+            // Apply hide-from-Dock setting on startup
+            if let Ok(val) = db::get_setting(app.handle().clone(), "hide_dock_icon".to_string()) {
+                if val == "1" {
+                    set_activation_policy(true);
+                }
+            }
+
             // Always start with light theme
             let _ = db::set_setting(app.handle().clone(), "theme".to_string(), "light".to_string());
 
@@ -321,6 +354,7 @@ pub fn run() {
             shortcut::show_translate_popup,
             shortcut::update_translate_shortcut,
             tray::update_tray_language,
+            set_hide_dock_icon,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

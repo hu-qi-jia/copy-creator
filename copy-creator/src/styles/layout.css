@@ -437,6 +437,10 @@
 /* === macOS traffic light buttons === */
 .macos-traffic-lights {
   display: none;
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 100;
 }
 
 [data-platform="macos"] .macos-traffic-lights {
@@ -649,7 +653,6 @@
 }
 
 [data-platform="macos"] .panel-window-header {
-  justify-content: flex-start;
   padding: 14px 14px 12px;
 }
 

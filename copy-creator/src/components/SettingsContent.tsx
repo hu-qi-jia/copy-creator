@@ -64,6 +64,7 @@ export default function SettingsContent({ embedded }: Props) {
   const [localShortcutKey, setLocalShortcutKey] = useState(settings.shortcutKey);
   const [localRadialMenuEnabled, setLocalRadialMenuEnabled] = useState(settings.radialMenuEnabled);
   const [localAutostart, setLocalAutostart] = useState(settings.autostartEnabled);
+  const [localHideDockIcon, setLocalHideDockIcon] = useState(settings.hideDockIcon);
   const [localRadialKeyboardShortcut, setLocalRadialKeyboardShortcut] = useState(settings.radialKeyboardShortcut);
   const [localTranslateShortcutKey, setLocalTranslateShortcutKey] = useState(settings.translateShortcutKey);
 
@@ -101,6 +102,7 @@ export default function SettingsContent({ embedded }: Props) {
     setLocalShortcutKey(settings.shortcutKey);
     setLocalRadialMenuEnabled(settings.radialMenuEnabled);
     setLocalAutostart(settings.autostartEnabled);
+    setLocalHideDockIcon(settings.hideDockIcon);
     setLocalRadialKeyboardShortcut(settings.radialKeyboardShortcut);
     setLocalTranslateShortcutKey(settings.translateShortcutKey);
   }, [settings, i18n.language]);
@@ -225,6 +227,10 @@ export default function SettingsContent({ embedded }: Props) {
 
     await settings.setAutostart(localAutostart);
 
+    if (localHideDockIcon !== settings.hideDockIcon) {
+      await settings.setHideDockIcon(localHideDockIcon);
+    }
+
     if (localLang !== i18n.language) {
       i18n.changeLanguage(localLang);
       emit("language-changed", { language: localLang });
@@ -272,6 +278,8 @@ export default function SettingsContent({ embedded }: Props) {
       <StartupSection
         localAutostart={localAutostart}
         setLocalAutostart={setLocalAutostart}
+        hideDockIcon={localHideDockIcon}
+        setHideDockIcon={setLocalHideDockIcon}
       />
 
       <TranslationSection

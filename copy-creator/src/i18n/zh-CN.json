@@ -41,6 +41,7 @@
     "dark": "暗色",
     "language": "语言",
     "startup": "开机启动",
+    "hideDock": "不显示在程序坞",
     "shortcut": "快捷键",
     "windowShortcut": "窗口呼出快捷键",
     "radialShortcut": "快捷菜单呼出快捷键",

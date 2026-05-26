@@ -23,6 +23,7 @@ interface ClipboardState {
   imageCache: Record<string, string>;
   category: ClipType;
   initialized: boolean;
+  selectedRecordId: string | null;
 
   init: () => void;
   setSearch: (s: string) => void;
@@ -32,6 +33,7 @@ interface ClipboardState {
   pasteRecord: (record: ClipboardRecord) => Promise<void>;
   getThumbnail: (record: ClipboardRecord) => Promise<string>;
   getImageData: (record: ClipboardRecord) => Promise<string>;
+  setSelectedRecord: (id: string | null) => void;
 }
 
 let unlisten: UnlistenFn | null = null;
@@ -72,6 +74,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   imageCache: {},
   category: "all",
   initialized: false,
+  selectedRecordId: null,
 
   init: () => {
     if (get().initialized) return;
@@ -188,6 +191,8 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       return "";
     }
   },
+
+  setSelectedRecord: (id: string | null) => set({ selectedRecordId: id }),
 }));
 
 if (typeof window !== "undefined") {

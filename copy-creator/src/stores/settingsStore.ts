@@ -22,12 +22,14 @@ interface SettingsState {
   radialKeyboardShortcut: string;
   translateShortcutKey: string;
   autostartEnabled: boolean;
+  hideDockIcon: boolean;
 
   toggleTheme: () => void;
   loadSettings: () => Promise<void>;
   setSetting: (key: string, value: string) => Promise<void>;
   setSettingsBatch: (settings: Record<string, string>) => Promise<void>;
   setAutostart: (enabled: boolean) => Promise<void>;
+  setHideDockIcon: (hide: boolean) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -47,6 +49,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   radialKeyboardShortcut: "",
   translateShortcutKey: "",
   autostartEnabled: false,
+  hideDockIcon: false,
 
   toggleTheme: () => {
     const next = get().themeMode === "light" ? "dark" : "light";
@@ -75,6 +78,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         radialMenuEnabled: settings.radial_menu_enabled !== "0",
         radialKeyboardShortcut: settings.radial_keyboard_shortcut || "",
         translateShortcutKey: settings.translate_shortcut_key || "",
+        hideDockIcon: settings.hide_dock_icon === "1",
       });
 
       // Read autostart state from the OS (plugin)
@@ -113,6 +117,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       set({ autostartEnabled: enabled });
     } catch (e) {
       console.error("Failed to set autostart:", e);
+    }
+  },
+
+  setHideDockIcon: async (hide: boolean) => {
+    try {
+      await invoke("set_hide_dock_icon", { hide });
+      set({ hideDockIcon: hide });
+    } catch (e) {
+      console.error("Failed to set hide dock icon:", e);
     }
   },
 }));

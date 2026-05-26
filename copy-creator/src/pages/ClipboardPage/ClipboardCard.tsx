@@ -7,7 +7,9 @@ import { formatTime, getFileName, TYPE_META } from "./utils";
 interface ClipboardCardProps {
   record: ClipboardRecord;
   index: number;
+  selected: boolean;
   getTypeLabel: (type: string) => string;
+  onSelect: (r: ClipboardRecord) => void;
   onPaste: (r: ClipboardRecord) => void;
   onDelete: (id: string) => void;
   onThumbHover: (thumbSrc: string, rect: DOMRect) => void;
@@ -17,7 +19,9 @@ interface ClipboardCardProps {
 function ClipboardCardInner({
   record,
   index,
+  selected,
   getTypeLabel,
+  onSelect,
   onPaste,
   onDelete,
   onThumbHover,
@@ -25,7 +29,13 @@ function ClipboardCardInner({
 }: ClipboardCardProps) {
   const meta = TYPE_META[record.type] || TYPE_META.text;
 
-  const handlePaste = useCallback(() => onPaste(record), [onPaste, record]);
+  const handleClick = useCallback(() => {
+    if (selected) {
+      onPaste(record);
+    } else {
+      onSelect(record);
+    }
+  }, [selected, onSelect, onPaste, record]);
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -36,9 +46,9 @@ function ClipboardCardInner({
 
   return (
     <div
-      className={`notification clipboard-card type-${record.type}`}
+      className={`notification clipboard-card type-${record.type}${selected ? " selected" : ""}`}
       style={{ "--color": meta.color, "--enter-delay": index } as React.CSSProperties}
-      onClick={handlePaste}
+      onClick={handleClick}
     >
       <div className="notibar" />
       <div className="noticontent">
@@ -54,10 +64,7 @@ function ClipboardCardInner({
               record={record}
               onHover={onThumbHover}
               onLeave={onThumbLeave}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPaste(record);
-              }}
+              onClick={handleClick}
             />
           ) : record.type === "link" ? (
             <span className="clipboard-link-content">{record.content}</span>

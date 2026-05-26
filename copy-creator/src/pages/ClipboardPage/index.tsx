@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useClipboardStore } from "../../stores/clipboardStore";
 import { Icons } from "../../components/Icons";
 import SearchInput from "../../components/SearchInput";
@@ -20,14 +21,17 @@ export default function ClipboardPage() {
     search,
     loading,
     category,
+    selectedRecordId,
     init,
     setSearch,
     setCategory,
     loadRecords,
     deleteRecord,
     pasteRecord,
+    setSelectedRecord,
   } = useClipboardStore();
 
+  const searchRef = useRef<HTMLInputElement>(null);
   const [hoverPreview, setHoverPreview] = useState<{ src: string; x: number; y: number } | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,6 +58,18 @@ export default function ClipboardPage() {
     [labels],
   );
 
+  const handleSelect = useCallback(
+    (r: typeof records[number]) => {
+      if (selectedRecordId === r.id) {
+        pasteRecord(r);
+        setSelectedRecord(null);
+      } else {
+        setSelectedRecord(r.id);
+      }
+    },
+    [selectedRecordId, pasteRecord, setSelectedRecord],
+  );
+
   const handlePaste = useCallback(
     (r: typeof records[number]) => pasteRecord(r),
     [pasteRecord],
@@ -71,6 +87,18 @@ export default function ClipboardPage() {
 
   useEffect(() => {
     init();
+  }, []);
+
+  // Auto-focus search input when window gains focus
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        setTimeout(() => searchRef.current?.focus(), 50);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   useEffect(() => {
@@ -91,6 +119,7 @@ export default function ClipboardPage() {
     <div className="clipboard-page">
       <div className="page-search">
         <SearchInput
+          ref={searchRef}
           placeholder={t("clipboard.search")}
           value={search}
           onChange={setSearch}
@@ -140,7 +169,9 @@ export default function ClipboardPage() {
               key={r.id}
               record={r}
               index={i}
+              selected={selectedRecordId === r.id}
               getTypeLabel={getTypeLabel}
+              onSelect={handleSelect}
               onPaste={handlePaste}
               onDelete={handleDelete}
               onThumbHover={handleThumbHover}

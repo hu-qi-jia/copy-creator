@@ -6,6 +6,7 @@ import PhrasePage from "./pages/PhrasePage";
 import TranslationPage from "./pages/TranslationPage";
 import SettingsContent from "./components/SettingsContent";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useClipboardStore } from "./stores/clipboardStore";
 import { Icons } from "./components/Icons";
 import i18n from "./i18n";
 
@@ -54,6 +55,18 @@ function App() {
     if (navigator.platform.startsWith("Mac")) {
       document.documentElement.setAttribute("data-platform", "macos");
     }
+  }, []);
+
+  // Clear selection when window is shown
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        useClipboardStore.getState().setSelectedRecord(null);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -108,6 +121,15 @@ function App() {
   const handleSettingsClick = () => setActivePanel("settings");
 
   const handleHide = async () => {
+    const { selectedRecordId, records, pasteRecord, setSelectedRecord } = useClipboardStore.getState();
+    if (selectedRecordId) {
+      const record = records.find((r) => r.id === selectedRecordId);
+      if (record) {
+        setSelectedRecord(null);
+        await pasteRecord(record);
+        return;
+      }
+    }
     await getCurrentWindow().hide();
   };
 
@@ -124,16 +146,18 @@ function App() {
 
   return (
     <div className="app-container">
+      <div className="macos-traffic-lights">
+        <button className="macos-traffic-btn macos-traffic-close" onClick={handleHide} title={t("common.hide")} />
+        <button className="macos-traffic-btn macos-traffic-minimize" onClick={handleMinimize} title="Minimize" />
+        <button className="macos-traffic-btn macos-traffic-zoom" onClick={handleZoom} title="Zoom" />
+      </div>
       <div
         ref={sidebarRef}
         className={`sidebar ${isCollapsed ? "collapsed" : ""}`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth }}
         data-tauri-drag-region
       >
-        <div className="sidebar-header" data-tauri-drag-region>
-          <img className="sidebar-logo" src="/logo_top.png" alt="logo" />
-          <span className="sidebar-brand">{t("brand.name")}</span>
-        </div>
+        <div className="sidebar-header" data-tauri-drag-region />
 
         <div className="sidebar-nav">
           {NAV_ITEMS.map((item) => {
@@ -185,11 +209,6 @@ function App() {
 
       <div className="panel-area">
         <div className="panel-window-header" data-tauri-drag-region>
-          <div className="macos-traffic-lights">
-            <button className="macos-traffic-btn macos-traffic-close" onClick={handleHide} title={t("common.hide")} />
-            <button className="macos-traffic-btn macos-traffic-minimize" onClick={handleMinimize} title="Minimize" />
-            <button className="macos-traffic-btn macos-traffic-zoom" onClick={handleZoom} title="Zoom" />
-          </div>
           <h3 className="panel-window-title" data-tauri-drag-region>
             {isSettingsPanel ? t("settings.title") : panelInfo ? t(panelInfo.titleKey) : ""}
           </h3>
