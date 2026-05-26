@@ -394,11 +394,10 @@ fn capture_selected_text(app: &AppHandle) -> String {
     #[cfg(target_os = "macos")]
     {
         let _ = enigo.key(Key::Meta, Direction::Press);
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        let _ = enigo.key(Key::Unicode('c'), Direction::Press);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let _ = enigo.key(Key::Unicode('c'), Direction::Release);
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        // Use Key::C (virtual keycode) not Key::Unicode('c') for reliable Cmd+C
+        let _ = enigo.key(Key::C, Direction::Click);
+        std::thread::sleep(std::time::Duration::from_millis(30));
         let _ = enigo.key(Key::Meta, Direction::Release);
     }
 
@@ -412,7 +411,7 @@ fn capture_selected_text(app: &AppHandle) -> String {
     }
 
     // Wait for clipboard to receive the copied text
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(150));
 
     let captured = app.clipboard().read_text()
         .map(|s| s.trim().to_string())
@@ -428,69 +427,77 @@ fn capture_selected_text(app: &AppHandle) -> String {
 
 #[tauri::command]
 pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
+    // Spawn on a background thread so the shortcut handler returns immediately.
+    // This allows the main run loop to process key-up events, so modifier keys
+    // from the shortcut are released before we simulate Cmd+C.
+    std::thread::spawn(move || {
+        // Give the user time to release the shortcut modifier keys
+        std::thread::sleep(std::time::Duration::from_millis(200));
 
-    // First try to capture currently selected text, fall back to clipboard
-    let selected_text = capture_selected_text(&app);
-    let text_to_translate = if !selected_text.is_empty() {
-        log::info!("[show_translate_popup] using captured selected text: {} chars", selected_text.len());
-        selected_text
-    } else {
-        let clipboard_text = app.clipboard().read_text()
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
-        log::info!("[show_translate_popup] falling back to clipboard: {} chars", clipboard_text.len());
-        clipboard_text
-    };
+        use tauri_plugin_clipboard_manager::ClipboardExt;
 
-    if text_to_translate.is_empty() {
-        log::info!("[show_translate_popup] no text to translate");
-        return Ok(());
-    }
+        // First try to capture currently selected text, fall back to clipboard
+        let selected_text = capture_selected_text(&app);
+        let text_to_translate = if !selected_text.is_empty() {
+            log::info!("[show_translate_popup] using captured selected text: {} chars", selected_text.len());
+            selected_text
+        } else {
+            let clipboard_text = app.clipboard().read_text()
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
+            log::info!("[show_translate_popup] falling back to clipboard: {} chars", clipboard_text.len());
+            clipboard_text
+        };
 
-    if let Some(window) = app.get_webview_window("translate-popup") {
-        crate::paste::save_foreground_window();
-
-        #[cfg(target_os = "windows")]
-        {
-            use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
-            use windows::Win32::Foundation::POINT;
-            let mut point = POINT { x: 0, y: 0 };
-            unsafe { GetCursorPos(&mut point).ok().unwrap_or_default(); }
-            let scale = window.scale_factor().unwrap_or(1.0);
-            let half_w = (190.0 * scale) as i32;
-            let top_off = (10.0 * scale) as i32;
-            let _ = window.set_position(tauri::Position::Physical(
-                tauri::PhysicalPosition::new(point.x - half_w, point.y - top_off),
-            ));
+        if text_to_translate.is_empty() {
+            log::info!("[show_translate_popup] no text to translate");
+            return;
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            use core_graphics::event::CGEvent;
-            use core_graphics::event_source::CGEventSource;
-            use core_graphics::event_source::CGEventSourceStateID::HIDSystemState;
+        if let Some(window) = app.get_webview_window("translate-popup") {
+            crate::paste::save_foreground_window();
 
-            let source = CGEventSource::new(HIDSystemState).ok();
-            let event = source.and_then(|s| CGEvent::new(s).ok());
-            if let Some(ev) = event {
-                let loc = ev.location();
-                let scale = window.scale_factor().unwrap_or(2.0);
-                let half_w = (190.0 * scale) as f64;
-                let top_off = (10.0 * scale) as f64;
-                let x = (loc.x - half_w) / scale as f64;
-                let y = (loc.y - top_off) / scale as f64;
+            #[cfg(target_os = "windows")]
+            {
+                use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+                use windows::Win32::Foundation::POINT;
+                let mut point = POINT { x: 0, y: 0 };
+                unsafe { GetCursorPos(&mut point).ok().unwrap_or_default(); }
+                let scale = window.scale_factor().unwrap_or(1.0);
+                let half_w = (190.0 * scale) as i32;
+                let top_off = (10.0 * scale) as i32;
                 let _ = window.set_position(tauri::Position::Physical(
-                    tauri::PhysicalPosition::new(x as i32, y as i32),
+                    tauri::PhysicalPosition::new(point.x - half_w, point.y - top_off),
                 ));
             }
+
+            #[cfg(target_os = "macos")]
+            {
+                use core_graphics::event::CGEvent;
+                use core_graphics::event_source::CGEventSource;
+                use core_graphics::event_source::CGEventSourceStateID::HIDSystemState;
+
+                let source = CGEventSource::new(HIDSystemState).ok();
+                let event = source.and_then(|s| CGEvent::new(s).ok());
+                if let Some(ev) = event {
+                    let loc = ev.location();
+                    let scale = window.scale_factor().unwrap_or(2.0);
+                    let half_w = (190.0 * scale) as f64;
+                    let top_off = (10.0 * scale) as f64;
+                    let x = (loc.x - half_w) / scale as f64;
+                    let y = (loc.y - top_off) / scale as f64;
+                    let _ = window.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition::new(x as i32, y as i32),
+                    ));
+                }
+            }
+
+            let _ = app.emit("translate-popup-text", &text_to_translate);
+
+            let _ = window.show();
+            let _ = window.set_focus();
         }
-
-        let _ = app.emit("translate-popup-text", &text_to_translate);
-
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    });
 
     Ok(())
 }

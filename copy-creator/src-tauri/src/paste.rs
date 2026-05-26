@@ -223,10 +223,9 @@ fn paste_with_defocus(app: &AppHandle) -> Result<(), String> {
     {
         enigo.key(Key::Meta, Direction::Press).map_err(|e| e.to_string())?;
         thread::sleep(Duration::from_millis(30));
-        enigo.key(Key::Unicode('v'), Direction::Press).map_err(|e| e.to_string())?;
-        thread::sleep(Duration::from_millis(10));
-        enigo.key(Key::Unicode('v'), Direction::Release).map_err(|e| e.to_string())?;
-        thread::sleep(Duration::from_millis(10));
+        // Use Key::V (virtual keycode) not Key::Unicode('v') for reliable Cmd+V
+        enigo.key(Key::V, Direction::Click).map_err(|e| e.to_string())?;
+        thread::sleep(Duration::from_millis(30));
         enigo.key(Key::Meta, Direction::Release).map_err(|e| e.to_string())?;
     }
 
