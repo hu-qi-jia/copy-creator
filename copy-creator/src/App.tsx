@@ -111,6 +111,14 @@ function App() {
     await getCurrentWindow().hide();
   };
 
+  const handleMinimize = async () => {
+    await getCurrentWindow().minimize();
+  };
+
+  const handleZoom = async () => {
+    await getCurrentWindow().toggleMaximize();
+  };
+
   const panelInfo = activePanel !== "settings" ? PANEL_MAP[activePanel] : null;
   const isSettingsPanel = activePanel === "settings";
 
@@ -177,15 +185,14 @@ function App() {
 
       <div className="panel-area">
         <div className="panel-window-header" data-tauri-drag-region>
+          <div className="macos-traffic-lights">
+            <button className="macos-traffic-btn macos-traffic-close" onClick={handleHide} title={t("common.hide")} />
+            <button className="macos-traffic-btn macos-traffic-minimize" onClick={handleMinimize} title="Minimize" />
+            <button className="macos-traffic-btn macos-traffic-zoom" onClick={handleZoom} title="Zoom" />
+          </div>
           <h3 className="panel-window-title" data-tauri-drag-region>
             {isSettingsPanel ? t("settings.title") : panelInfo ? t(panelInfo.titleKey) : ""}
           </h3>
-          <button className="window-close-btn" onClick={handleHide} title={t("common.hide")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
         </div>
         <div className="panel-window-body">
           {isSettingsPanel ? (

@@ -429,17 +429,50 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* macOS traffic light buttons spacing */
-[data-platform="macos"] .sidebar-header {
-  padding-top: 32px;
+/* === macOS traffic light buttons === */
+.macos-traffic-lights {
+  display: none;
 }
 
-[data-platform="macos"] .sidebar.collapsed .sidebar-header {
-  padding-top: 32px;
+[data-platform="macos"] .macos-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
-[data-platform="macos"] .panel-window-header {
-  padding-top: 32px;
+.macos-traffic-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: filter 0.15s ease;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.macos-traffic-btn:hover {
+  filter: brightness(0.8);
+}
+
+.macos-traffic-btn:active {
+  filter: brightness(0.6);
+}
+
+.macos-traffic-close {
+  background: #FF5F57;
+}
+
+.macos-traffic-minimize {
+  background: #FFBD2E;
+}
+
+.macos-traffic-zoom {
+  background: #28C840;
 }
 
 .content-area {
@@ -610,6 +643,12 @@
   app-region: drag;
 }
 
+[data-platform="macos"] .panel-window-header {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 14px 14px 12px 12px;
+}
+
 [data-theme="dark"] .panel-window-header {
   border-bottom-color: var(--separator);
 }
@@ -622,34 +661,6 @@
   letter-spacing: -0.3px;
 }
 
-.window-close-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: var(--close-btn-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.83, 0, 0.17, 1);
-  color: var(--close-btn-color);
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  flex-shrink: 0;
-  outline: none;
-}
-
-.window-close-btn:hover {
-  background: var(--close-btn-hover-bg);
-  color: var(--close-btn-hover-color);
-  transform: scale(1.1);
-}
-
-.window-close-btn svg {
-  width: 14px;
-  height: 14px;
-}
 
 .panel-window-body {
   flex: 1;
