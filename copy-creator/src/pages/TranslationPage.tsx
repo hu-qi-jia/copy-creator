@@ -53,6 +53,14 @@ export default function TranslationPage() {
           placeholder={t("translate.inputPlaceholder")}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (!loading && inputText.trim()) {
+                translate();
+              }
+            }
+          }}
         />
         <div className="translation-input-footer">
           <span className="char-count">{inputText.length}</span>

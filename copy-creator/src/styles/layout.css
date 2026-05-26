@@ -429,6 +429,19 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* macOS traffic light buttons spacing */
+[data-platform="macos"] .sidebar-header {
+  padding-top: 32px;
+}
+
+[data-platform="macos"] .sidebar.collapsed .sidebar-header {
+  padding-top: 32px;
+}
+
+[data-platform="macos"] .panel-window-header {
+  padding-top: 32px;
+}
+
 .content-area {
   display: none;
 }

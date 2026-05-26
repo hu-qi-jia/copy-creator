@@ -50,6 +50,12 @@ function App() {
     document.documentElement.setAttribute("data-theme", themeMode);
   }, [themeMode]);
 
+  useEffect(() => {
+    if (navigator.platform.startsWith("Mac")) {
+      document.documentElement.setAttribute("data-platform", "macos");
+    }
+  }, []);
+
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDragging.current = true;
