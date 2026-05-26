@@ -126,7 +126,7 @@ fn apply_vibrancy_effect(window: &tauri::WebviewWindow) {
                     "apply_vibrancy_effect: invalid bounds ({:?} x {:?}), falling back to zero rect",
                     bounds.size.width, bounds.size.height
                 );
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize { width: 0.0, height: 0.0 })
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0))
             };
             let effect_view: id = msg_send![ns_vev_class, alloc];
             let effect_view: id = msg_send![effect_view, initWithFrame: frame];

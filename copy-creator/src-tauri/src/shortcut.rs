@@ -395,8 +395,7 @@ fn capture_selected_text(app: &AppHandle) -> String {
     {
         let _ = enigo.key(Key::Meta, Direction::Press);
         std::thread::sleep(std::time::Duration::from_millis(30));
-        // Use Key::C (virtual keycode) not Key::Unicode('c') for reliable Cmd+C
-        let _ = enigo.key(Key::C, Direction::Click);
+        let _ = enigo.key(Key::Unicode('c'), Direction::Click);
         std::thread::sleep(std::time::Duration::from_millis(30));
         let _ = enigo.key(Key::Meta, Direction::Release);
     }
