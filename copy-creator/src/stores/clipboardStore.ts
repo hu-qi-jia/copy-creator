@@ -30,6 +30,7 @@ interface ClipboardState {
   setCategory: (c: ClipType) => void;
   loadRecords: () => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
+  copyRecord: (record: ClipboardRecord) => Promise<void>;
   pasteRecord: (record: ClipboardRecord) => Promise<void>;
   getThumbnail: (record: ClipboardRecord) => Promise<string>;
   getImageData: (record: ClipboardRecord) => Promise<string>;
@@ -134,6 +135,20 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       });
     } catch (e) {
       console.error("Failed to delete record:", e);
+    }
+  },
+
+  copyRecord: async (record: ClipboardRecord) => {
+    try {
+      if (record.type === "image") {
+        await invoke("copy_image", { path: record.content });
+      } else if (record.type === "file") {
+        await invoke("copy_file", { path: record.content });
+      } else {
+        await invoke("copy_text", { text: record.content });
+      }
+    } catch (e) {
+      console.error("Copy failed:", e);
     }
   },
 

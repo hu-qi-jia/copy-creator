@@ -69,6 +69,27 @@ pub fn save_foreground_window() {
     }
 }
 
+/// Restore the previously saved foreground application (macOS only).
+/// Used before simulating Cmd+C in capture_selected_text to ensure
+/// the copy goes to the correct app.
+#[cfg(target_os = "macos")]
+pub fn restore_foreground_app() {
+    let pid = LAST_FOREGROUND_PID.load(Ordering::SeqCst);
+    if pid <= 0 {
+        return;
+    }
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+    unsafe {
+        let ns_running_app = Class::get("NSRunningApplication").unwrap();
+        let app: *mut Object = msg_send![ns_running_app, runningApplicationWithProcessIdentifier: pid];
+        if !app.is_null() {
+            // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+            let _: bool = msg_send![app, activateWithOptions: 2usize];
+        }
+    }
+}
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -553,5 +574,75 @@ pub fn paste_file(app: AppHandle, path: String) -> Result<(), String> {
         paste_with_defocus(&handle).ok();
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+pub fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    app.clipboard().write_text(&text).map_err(|e| e.to_string())?;
+    crate::clipboard::sync_monitor_cache(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn copy_image(app: AppHandle, path: String) -> Result<(), String> {
+    let (png, _w, _h) = {
+        let cache = get_image_cache().lock().unwrap();
+        if let Some(cached) = cache.map.get(&path) {
+            (cached.png_bytes.clone(), cached.width, cached.height)
+        } else {
+            drop(cache);
+            let mut base_dir = crate::db::get_storage_dir(&app);
+            base_dir.push(&path);
+            let bytes = std::fs::read(&base_dir).map_err(|e| e.to_string())?;
+            let png = Arc::new(bytes);
+            let (w, h) = {
+                use image::ImageDecoder;
+                let decoder = image::codecs::png::PngDecoder::new(std::io::Cursor::new(png.as_ref()))
+                    .map_err(|e| e.to_string())?;
+                decoder.dimensions()
+            };
+            cache_image(path.clone(), vec![], w, h, png.as_ref().to_vec());
+            (png, w, h)
+        }
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        copy_image_macos(&png, _w as u32, _h as u32);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        copy_image_windows(&png, _w as u32, _h as u32);
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        app.clipboard().write_text(&path).map_err(|e| e.to_string())?;
+    }
+
+    crate::clipboard::sync_monitor_cache(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn copy_file(app: AppHandle, path: String) -> Result<(), String> {
+    let mut base_dir = crate::db::get_storage_dir(&app);
+    base_dir.push(&path);
+    let full_path = base_dir.to_string_lossy().to_string();
+
+    #[cfg(target_os = "macos")]
+    {
+        copy_file_macos(&full_path);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        copy_file_windows(&full_path);
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        app.clipboard().write_text(&full_path).map_err(|e| e.to_string())?;
+    }
+
+    crate::clipboard::sync_monitor_cache(&app);
     Ok(())
 }

@@ -121,15 +121,6 @@ function App() {
   const handleSettingsClick = () => setActivePanel("settings");
 
   const handleHide = async () => {
-    const { selectedRecordId, records, pasteRecord, setSelectedRecord } = useClipboardStore.getState();
-    if (selectedRecordId) {
-      const record = records.find((r) => r.id === selectedRecordId);
-      if (record) {
-        setSelectedRecord(null);
-        await pasteRecord(record);
-        return;
-      }
-    }
     await getCurrentWindow().hide();
   };
 

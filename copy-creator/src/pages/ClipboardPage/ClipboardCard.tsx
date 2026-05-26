@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useRef } from "react";
 import type { ClipboardRecord } from "../../types";
 import { Icons } from "../../components/Icons";
 import { ImageThumb } from "./ImageThumb";
@@ -7,9 +7,8 @@ import { formatTime, getFileName, TYPE_META } from "./utils";
 interface ClipboardCardProps {
   record: ClipboardRecord;
   index: number;
-  selected: boolean;
   getTypeLabel: (type: string) => string;
-  onSelect: (r: ClipboardRecord) => void;
+  onCopy: (r: ClipboardRecord) => void;
   onPaste: (r: ClipboardRecord) => void;
   onDelete: (id: string) => void;
   onThumbHover: (thumbSrc: string, rect: DOMRect) => void;
@@ -19,23 +18,31 @@ interface ClipboardCardProps {
 function ClipboardCardInner({
   record,
   index,
-  selected,
   getTypeLabel,
-  onSelect,
+  onCopy,
   onPaste,
   onDelete,
   onThumbHover,
   onThumbLeave,
 }: ClipboardCardProps) {
   const meta = TYPE_META[record.type] || TYPE_META.text;
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleClick = useCallback(() => {
-    if (selected) {
+    if (clickTimerRef.current) {
+      // Second click within threshold → double click → paste
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
       onPaste(record);
     } else {
-      onSelect(record);
+      // First click → wait to distinguish from double click
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
+        onCopy(record);
+      }, 250);
     }
-  }, [selected, onSelect, onPaste, record]);
+  }, [onCopy, onPaste, record]);
+
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -46,7 +53,7 @@ function ClipboardCardInner({
 
   return (
     <div
-      className={`notification clipboard-card type-${record.type}${selected ? " selected" : ""}`}
+      className={`notification clipboard-card type-${record.type}`}
       style={{ "--color": meta.color, "--enter-delay": index } as React.CSSProperties}
       onClick={handleClick}
     >

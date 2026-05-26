@@ -21,14 +21,13 @@ export default function ClipboardPage() {
     search,
     loading,
     category,
-    selectedRecordId,
     init,
     setSearch,
     setCategory,
     loadRecords,
     deleteRecord,
+    copyRecord,
     pasteRecord,
-    setSelectedRecord,
   } = useClipboardStore();
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -58,16 +57,9 @@ export default function ClipboardPage() {
     [labels],
   );
 
-  const handleSelect = useCallback(
-    (r: typeof records[number]) => {
-      if (selectedRecordId === r.id) {
-        pasteRecord(r);
-        setSelectedRecord(null);
-      } else {
-        setSelectedRecord(r.id);
-      }
-    },
-    [selectedRecordId, pasteRecord, setSelectedRecord],
+  const handleCopy = useCallback(
+    (r: typeof records[number]) => copyRecord(r),
+    [copyRecord],
   );
 
   const handlePaste = useCallback(
@@ -169,9 +161,8 @@ export default function ClipboardPage() {
               key={r.id}
               record={r}
               index={i}
-              selected={selectedRecordId === r.id}
               getTypeLabel={getTypeLabel}
-              onSelect={handleSelect}
+              onCopy={handleCopy}
               onPaste={handlePaste}
               onDelete={handleDelete}
               onThumbHover={handleThumbHover}
