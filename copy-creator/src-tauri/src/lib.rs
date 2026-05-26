@@ -5,8 +5,10 @@ mod shortcut;
 mod translator;
 mod tray;
 
+use std::str::FromStr;
 use tauri::Manager;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_global_shortcut::Shortcut as GShortcut;
 
 #[cfg(target_os = "windows")]
 fn apply_backdrop_effect(window: &tauri::WebviewWindow) {
@@ -96,6 +98,20 @@ fn apply_vibrancy_effect(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Compare a stored shortcut string (from DB) against the pressed shortcut.
+/// Uses structured HotKey comparison to handle format differences:
+/// frontend stores "Shift+D", but HotKey::to_string() outputs "shift+KeyD".
+fn shortcut_matches(stored: &str, pressed: &GShortcut) -> bool {
+    if stored.is_empty() {
+        return false;
+    }
+    if let Ok(parsed) = GShortcut::from_str(stored) {
+        return parsed == *pressed;
+    }
+    // Fallback to string comparison for legacy or unusual formats
+    stored == pressed.to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -106,12 +122,10 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let pressed = shortcut.to_string();
-
                         // Check translate popup shortcut
                         let translate_key = db::get_setting(app.clone(), "translate_shortcut_key".to_string())
                             .unwrap_or_default();
-                        if !translate_key.is_empty() && pressed == translate_key {
+                        if shortcut_matches(&translate_key, shortcut) {
                             shortcut::show_translate_popup(app.clone())
                                 .unwrap_or_else(|e| log::warn!("show_translate_popup error: {}", e));
                             return;
@@ -120,7 +134,7 @@ pub fn run() {
                         // Check radial menu keyboard shortcut
                         let radial_key = db::get_setting(app.clone(), "radial_keyboard_shortcut".to_string())
                             .unwrap_or_default();
-                        if !radial_key.is_empty() && pressed == radial_key {
+                        if shortcut_matches(&radial_key, shortcut) {
                             shortcut::show_radial_menu(app.clone())
                                 .unwrap_or_else(|e| log::warn!("show_radial_menu error: {}", e));
                             return;
