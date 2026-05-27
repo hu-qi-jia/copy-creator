@@ -165,4 +165,7 @@ copy-creator/
 
 如果觉得这个项目对你有帮助，欢迎点个 Star 支持一下！
 
+感谢baihejiangnan的贡献！
+
+
 </div>
