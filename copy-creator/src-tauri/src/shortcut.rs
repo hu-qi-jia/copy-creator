@@ -2,137 +2,6 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
-use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-
-#[cfg(target_os = "macos")]
-extern "C" {
-    fn AXIsProcessTrusted() -> bool;
-}
-
-#[cfg(target_os = "macos")]
-fn is_accessibility_permitted() -> bool {
-    unsafe { AXIsProcessTrusted() }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn is_accessibility_permitted() -> bool {
-    true
-}
-
-// ---------------------------------------------------------------------------
-// macOS Accessibility API — read selected text directly without touching the
-// clipboard or simulating keystrokes (same approach as Easydict).
-// ---------------------------------------------------------------------------
-
-#[cfg(target_os = "macos")]
-mod mac_accessibility {
-    use std::ffi::CString;
-
-    #[link(name = "ApplicationServices", kind = "framework")]
-    extern "C" {
-        fn AXUIElementCreateSystemWide() -> *const std::ffi::c_void;
-        fn AXUIElementCopyAttributeValue(
-            element: *const std::ffi::c_void,
-            attribute: *const std::ffi::c_void,
-            value: *mut *const std::ffi::c_void,
-        ) -> i32;
-        fn CFRelease(cf: *const std::ffi::c_void);
-        fn CFStringCreateWithCString(
-            alloc: *const std::ffi::c_void,
-            c_str: *const std::os::raw::c_char,
-            encoding: u32,
-        ) -> *const std::ffi::c_void;
-    }
-
-    const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
-
-    fn cf_string(s: &str) -> *const std::ffi::c_void {
-        let c = CString::new(s).unwrap();
-        unsafe {
-            CFStringCreateWithCString(
-                std::ptr::null(),
-                c.as_ptr(),
-                K_CF_STRING_ENCODING_UTF8,
-            )
-        }
-    }
-
-    /// Read the currently selected text in the frontmost application using the
-    /// macOS Accessibility API (AXSelectedText). Returns None when the focused
-    /// element doesn't expose a text selection or the API is unavailable.
-    pub fn get_selected_text() -> Option<String> {
-        unsafe {
-            let system = AXUIElementCreateSystemWide();
-            if system.is_null() {
-                return None;
-            }
-
-            // --- get focused application ---
-            let attr = cf_string("AXFocusedApplication");
-            let mut app: *const std::ffi::c_void = std::ptr::null();
-            let ok = AXUIElementCopyAttributeValue(
-                system,
-                attr,
-                &mut app as *mut _ as *mut *const std::ffi::c_void,
-            ) == 0
-                && !app.is_null();
-            CFRelease(attr);
-            if !ok {
-                CFRelease(system);
-                return None;
-            }
-
-            // --- get focused element inside that app ---
-            let attr = cf_string("AXFocusedUIElement");
-            let mut el: *const std::ffi::c_void = std::ptr::null();
-            let ok = AXUIElementCopyAttributeValue(
-                app,
-                attr,
-                &mut el as *mut _ as *mut *const std::ffi::c_void,
-            ) == 0
-                && !el.is_null();
-            CFRelease(attr);
-            CFRelease(app);
-            if !ok {
-                CFRelease(system);
-                return None;
-            }
-
-            // --- read selected text ---
-            let attr = cf_string("AXSelectedText");
-            let mut text: *const std::ffi::c_void = std::ptr::null();
-            let ok = AXUIElementCopyAttributeValue(
-                el,
-                attr,
-                &mut text as *mut _ as *mut *const std::ffi::c_void,
-            ) == 0
-                && !text.is_null();
-            CFRelease(attr);
-            CFRelease(el);
-            CFRelease(system);
-            if !ok {
-                return None;
-            }
-
-            // CFString is toll-free bridged to NSString
-            use objc::runtime::Object;
-            let ns_str = text as *mut Object;
-            let c_str: *const std::os::raw::c_char = objc::msg_send![ns_str, UTF8String];
-            let result = if c_str.is_null() {
-                String::new()
-            } else {
-                std::ffi::CStr::from_ptr(c_str).to_string_lossy().into_owned()
-            };
-            CFRelease(text);
-
-            if result.trim().is_empty() {
-                None
-            } else {
-                Some(result)
-            }
-        }
-    }
-}
 
 static RADIAL_MENU_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -480,95 +349,6 @@ pub fn update_radial_keyboard_shortcut(
     Ok(())
 }
 
-/// Capture selected text using a multi-level strategy (inspired by Easydict):
-///   1. macOS Accessibility API (AXSelectedText)    — no side effects
-///   2. Simulate Cmd+C / Ctrl+C with foreground restore — fallback
-///   3. Read clipboard directly                      — last resort
-fn capture_selected_text(app: &AppHandle) -> String {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
-
-    static ACCESSIBILITY_OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    let trusted = *ACCESSIBILITY_OK.get_or_init(|| is_accessibility_permitted());
-
-    // --- Level 1: macOS Accessibility API (no clipboard touch, no keystrokes) ---
-    #[cfg(target_os = "macos")]
-    if trusted {
-        if let Some(text) = mac_accessibility::get_selected_text() {
-            log::info!(
-                "[capture_selected_text] got via AX: {} chars",
-                text.len()
-            );
-            return text;
-        }
-        log::info!("[capture_selected_text] AX returned nothing, falling back to Cmd+C");
-    }
-
-    if !trusted {
-        log::info!("[capture_selected_text] accessibility not trusted, falling back to clipboard");
-        return app
-            .clipboard()
-            .read_text()
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
-    }
-
-    // --- Level 2: simulate copy keystroke ---
-    // Save current clipboard so we can restore it afterwards.
-    let saved = app.clipboard().read_text().unwrap_or_default();
-
-    // Restore focus to the original foreground app so Cmd+C targets the right window.
-    #[cfg(target_os = "macos")]
-    {
-        crate::paste::restore_foreground_app();
-        // Brief settle time after activating the target app
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    let mut enigo = match Enigo::new(&Settings::default()) {
-        Ok(e) => e,
-        Err(_) => return String::new(),
-    };
-
-    #[cfg(target_os = "macos")]
-    {
-        let _ = enigo.key(Key::Meta, Direction::Press);
-        std::thread::sleep(std::time::Duration::from_millis(30));
-        let _ = enigo.key(Key::Unicode('c'), Direction::Click);
-        std::thread::sleep(std::time::Duration::from_millis(30));
-        let _ = enigo.key(Key::Meta, Direction::Release);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let _ = enigo.key(Key::Control, Direction::Press);
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        let _ = enigo.key(Key::C, Direction::Click);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let _ = enigo.key(Key::Control, Direction::Release);
-    }
-
-    // Wait for clipboard to receive the copied text
-    std::thread::sleep(std::time::Duration::from_millis(150));
-
-    let captured = app
-        .clipboard()
-        .read_text()
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
-
-    // Restore original clipboard if we captured something different
-    if !captured.is_empty() && captured != saved {
-        let _ = app.clipboard().write_text(&saved);
-    }
-
-    log::info!(
-        "[capture_selected_text] Cmd+C captured: {} chars",
-        captured.len()
-    );
-
-    captured
-}
-
 /// Clamp proposed window position so the window stays fully within the containing monitor.
 fn clamp_to_monitor_bounds(
     window: &tauri::WebviewWindow,
@@ -630,14 +410,13 @@ pub fn show_translate_popup(app: AppHandle) -> Result<(), String> {
         // Give the user time to release the shortcut modifier keys
         std::thread::sleep(std::time::Duration::from_millis(200));
 
-        use tauri_plugin_clipboard_manager::ClipboardExt;
-
         // First try to capture currently selected text, fall back to clipboard
-        let selected_text = capture_selected_text(&app);
+        let selected_text = crate::selection::capture_selected_text();
         let text_to_translate = if !selected_text.is_empty() {
             log::info!("[show_translate_popup] using captured selected text: {} chars", selected_text.len());
             selected_text
         } else {
+            use tauri_plugin_clipboard_manager::ClipboardExt;
             let clipboard_text = app.clipboard().read_text()
                 .map(|s| s.trim().to_string())
                 .unwrap_or_default();

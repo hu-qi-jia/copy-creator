@@ -4,6 +4,7 @@ extern crate objc;
 mod clipboard;
 mod db;
 mod paste;
+mod selection;
 mod shortcut;
 mod translator;
 mod tray;
