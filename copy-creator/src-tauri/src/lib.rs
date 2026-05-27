@@ -143,7 +143,10 @@ pub fn run() {
                 .build()?;
                 let _ = radial.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
                 #[cfg(target_os = "windows")]
-                apply_backdrop_effect(&radial);
+                {
+                    apply_backdrop_effect(&radial);
+                    paste::register_radial_hwnd(&radial);
+                }
                 log::info!("Radial menu popup window created");
             }
 

@@ -12,6 +12,15 @@ static LAST_FOREGROUND_HWND: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(ptr::
 static OUR_HWND: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "windows")]
+static RADIAL_HWND: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(ptr::null_mut());
+
+#[cfg(target_os = "windows")]
+pub fn register_radial_hwnd(window: &tauri::WebviewWindow) {
+    let hwnd = window.hwnd().unwrap_or_default();
+    RADIAL_HWND.store(hwnd.0, Ordering::SeqCst);
+}
+
+#[cfg(target_os = "windows")]
 pub fn save_foreground_window() {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     unsafe {
@@ -56,7 +65,8 @@ unsafe extern "system" fn foreground_change_hook(
     _event_time: u32,
 ) {
     let our = OUR_HWND.load(Ordering::SeqCst);
-    if hwnd.0 != our && !hwnd.is_invalid() {
+    let radial = RADIAL_HWND.load(Ordering::SeqCst);
+    if hwnd.0 != our && hwnd.0 != radial && !hwnd.is_invalid() {
         LAST_FOREGROUND_HWND.store(hwnd.0, Ordering::SeqCst);
     }
 }
