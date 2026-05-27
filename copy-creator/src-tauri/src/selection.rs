@@ -293,9 +293,9 @@ fn scheme_sniff_browser(bundle_id: &str) -> Option<ApplescriptSyntax> {
 // ---------------------------------------------------------------------------
 
 #[cfg(target_os = "macos")]
-#[link(name = "Foundation", kind = "framework")]
+#[link(name = "System")]
 extern "C" {
-    fn dispatch_get_main_queue() -> *mut std::ffi::c_void;
+    static _dispatch_main_q: u8;
     fn dispatch_async_f(
         queue: *mut std::ffi::c_void,
         context: *mut std::ffi::c_void,
@@ -385,8 +385,11 @@ fn run_applescript_on_main_thread(script: &str, bundle_id: &str) -> Option<Strin
     let ctx_ptr = Box::into_raw(ctx) as *mut std::ffi::c_void;
 
     unsafe {
-        let main_queue = dispatch_get_main_queue();
-        dispatch_async_f(main_queue, ctx_ptr, applescript_work);
+        dispatch_async_f(
+            &_dispatch_main_q as *const u8 as *mut std::ffi::c_void,
+            ctx_ptr,
+            applescript_work,
+        );
     }
 
     // Spin-wait with 500ms timeout
